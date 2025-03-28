@@ -1,0 +1,11 @@
+Model Information:
+* title:	Car_003 HotWheels, Bike, Car Race, Free model
+* source:	https://sketchfab.com/3d-models/car-003-hotwheels-bike-car-race-free-model-9f3522623cf8430a8e171a1fc8b7c5df
+* author:	rgrimes2686 (https://sketchfab.com/rgrimes2686)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Car_003 HotWheels, Bike, Car Race, Free model" (https://sketchfab.com/3d-models/car-003-hotwheels-bike-car-race-free-model-9f3522623cf8430a8e171a1fc8b7c5df) by rgrimes2686 (https://sketchfab.com/rgrimes2686) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
