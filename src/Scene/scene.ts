@@ -4,7 +4,6 @@ import { GUI } from "dat.gui";
 import { Car } from "../classes/Car";
 import { Environment } from "../classes/Environment";
 import { Renderer } from "../classes/Renderer";
-import { Camera } from "./camera";
 import { SceneConfig, DEFAULT_SCENE_CONFIG } from "../interfaces/SceneConfig";
 import { PhysicsEngine } from "../classes/PhysicsEngine";
 import { ThirdPersonCamera } from "../classes/ThirdPersonCamera";
@@ -13,7 +12,6 @@ export class Scene {
     private scene: THREE.Scene;
     private renderer!: Renderer;
     private gui!: GUI;
-    private camera!: Camera;
     private thirdPersonCamera!: ThirdPersonCamera;
     private environment!: Environment;
     private clock: THREE.Clock;
@@ -30,10 +28,7 @@ export class Scene {
         this.initialize();
     }
 
-    private initialize(): void {
-        // Créer la caméra principale
-        this.camera = new Camera();
-        
+    private initialize(): void {  
         // Load car model first
         this.car = new Car('/models/car-002/scene.gltf', this.config.car, (model) => {
             this.scene.add(model);
@@ -46,13 +41,13 @@ export class Scene {
             }
             
             // Initialiser la caméra à la troisième personne
-            this.thirdPersonCamera = new ThirdPersonCamera(this.camera.getCamera(), this.car);
+            this.thirdPersonCamera = new ThirdPersonCamera(this.car);
             
             // Initialize environment
-            this.environment = new Environment(this.scene, this.camera, this.config);
+            this.environment = new Environment(this.scene, this.thirdPersonCamera, this.config);
             
             // Initialize renderer
-            this.renderer = new Renderer(this.camera, this.config, () => this.animate());
+            this.renderer = new Renderer(this.thirdPersonCamera, this.config, () => this.animate());
             
             // Ajouter la voiture au moteur physique
             this.physicsEngine.addObject(this.car);
@@ -116,11 +111,11 @@ export class Scene {
         };
 
         cameraFolder.add(cameraConfig, 'offsetX', -10, 10, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setOffset(value, cameraConfig.offsetY, cameraConfig.offsetZ));
+            .onChange((value) => this.thirdPersonCamera.setPosition(new THREE.Vector3(value, cameraConfig.offsetY, cameraConfig.offsetZ)));
         cameraFolder.add(cameraConfig, 'offsetY', 0, 10, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setOffset(cameraConfig.offsetX, value, cameraConfig.offsetZ));
+            .onChange((value) => this.thirdPersonCamera.setPosition(new THREE.Vector3(cameraConfig.offsetX, value, cameraConfig.offsetZ)));
         cameraFolder.add(cameraConfig, 'offsetZ', 0, 20, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setOffset(cameraConfig.offsetX, cameraConfig.offsetY, value));
+            .onChange((value) => this.thirdPersonCamera.setPosition(new THREE.Vector3(cameraConfig.offsetX, cameraConfig.offsetY, value)));
         cameraFolder.add(cameraConfig, 'smoothness', 0.01, 1, 0.01)
             .onChange((value) => this.thirdPersonCamera.setSmoothness(value));
         

@@ -1,18 +1,17 @@
 import * as THREE from "three";
 import { Light } from "../Scene/light";
 import { AmbientLight } from "../Scene/ambientLight";
-import { Camera } from "../Scene/camera";
 import { SceneConfig } from "../interfaces/SceneConfig";
-
+import { ThirdPersonCamera } from "./ThirdPersonCamera";
 export class Environment {
     private scene: THREE.Scene;
     private ground!: THREE.Mesh;
-    private camera: Camera;
+    private camera: ThirdPersonCamera;
     private light: Light;
     private ambientLight: AmbientLight;
     private config: SceneConfig;
 
-    constructor(scene: THREE.Scene, camera: Camera, config: SceneConfig) {
+    constructor(scene: THREE.Scene, camera: ThirdPersonCamera, config: SceneConfig) {
         this.scene = scene;
         this.camera = camera;
         this.config = config;

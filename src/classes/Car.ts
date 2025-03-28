@@ -127,12 +127,22 @@ export class Car extends AnimatedModel implements PhysicsObject {
         this.position.copy(model.position);
     }
 
+    public getPosition(): THREE.Vector3 {
+        return this.position;
+    }
+
     public setPosition(x: number, y: number, z: number): void {
         super.setPosition(x, y, z);
         this.position.set(x, y, z);
         this.boundingBox.setFromCenterAndSize(this.position, this.collisionSize);
     }
 
+    public getRotation(): THREE.Vector3 {
+        // Retourne la rotation actuelle de la voiture sous forme de Vector3
+        // Seul l'axe Y est utilisé car la voiture ne tourne que sur cet axe
+        return new THREE.Vector3(0, -this.currentRotation, 0);
+    }
+    
     private updateAnimations(): void {
         if (Math.abs(this.speed) > 0.01) {
             const wheelAnimationIndex = this.getAnimationNames().findIndex(name => 

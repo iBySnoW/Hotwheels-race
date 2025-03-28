@@ -1,14 +1,14 @@
 import * as THREE from "three";
-import { Camera } from "../Scene/camera";
 import { SceneConfig } from "../interfaces/SceneConfig";
+import { ThirdPersonCamera } from "./ThirdPersonCamera";
 
 export class Renderer {
     private renderer: THREE.WebGLRenderer;
-    private camera: Camera;
+    private camera: ThirdPersonCamera;
     private config: SceneConfig;
     private animationCallback: () => void;
 
-    constructor(camera: Camera, config: SceneConfig, animationCallback: () => void) {
+    constructor(camera: ThirdPersonCamera, config: SceneConfig, animationCallback: () => void) {
         this.camera = camera;
         this.config = config;
         this.animationCallback = animationCallback;
