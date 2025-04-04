@@ -11,13 +11,13 @@ export interface CarConfig {
 }
 
 export const DEFAULT_CAR_CONFIG: CarConfig = {
-    maxSpeed: 0.3,
-    acceleration: 0.01,
-    deceleration: 0.001,
-    rotationSpeed: 0.03,
+    maxSpeed: 30,        // Vitesse maximale en m/s
+    acceleration: 1,     // Accélération en m/s²
+    deceleration: 0.5,   // Décélération en m/s²
+    rotationSpeed: 0.1,  // Vitesse de rotation en rad/s
     position: {
         x: 0,
-        y: 0,
+        y: 1,
         z: 0
     }
 }; 

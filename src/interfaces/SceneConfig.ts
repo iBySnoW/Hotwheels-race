@@ -24,13 +24,13 @@ export interface SceneConfig {
 
 export const DEFAULT_SCENE_CONFIG: SceneConfig = {
     car: {
-        maxSpeed: 0.3,
-        acceleration: 0.01,
-        deceleration: 0.001,
-        rotationSpeed: 0.03,
+        maxSpeed: 30,        // Vitesse maximale en m/s
+        acceleration: 1,     // Accélération en m/s²
+        deceleration: 0.5,   // Décélération en m/s²
+        rotationSpeed: 0.1,  // Vitesse de rotation en rad/s
         position: {
-            x: -6,
-            y: 0,
+            x: 0,
+            y: 3,
             z: 0
         }
     },
@@ -48,8 +48,8 @@ export const DEFAULT_SCENE_CONFIG: SceneConfig = {
         zoomSpeed: 1.0
     },
     environment: {
-        groundSize: 25,
-        groundColor: 0xffff00,
+        groundSize: 100,     // Sol plus grand
+        groundColor: 0x808080, // Couleur grise plus réaliste
         groundY: 0
     }
 }; 

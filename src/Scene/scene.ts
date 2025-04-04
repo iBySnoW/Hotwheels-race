@@ -1,12 +1,15 @@
 import * as THREE from "three";
 import { GUI } from "dat.gui";
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 // Classes
 import { Car } from "../classes/Car";
 import { Environment } from "../classes/Environment";
 import { Renderer } from "../classes/Renderer";
 import { SceneConfig, DEFAULT_SCENE_CONFIG } from "../interfaces/SceneConfig";
-import { PhysicsEngine } from "../classes/PhysicsEngine";
+import { PhysicsWorld } from "../classes/PhysicsWorld";
 import { ThirdPersonCamera } from "../classes/ThirdPersonCamera";
+import { PhysicsDebugger } from '../classes/PhysicsDebugger';
 
 export class Scene {
     private scene: THREE.Scene;
@@ -17,21 +20,27 @@ export class Scene {
     private clock: THREE.Clock;
     private car!: Car;
     private config: SceneConfig;
-    private physicsEngine: PhysicsEngine;
+    private physicsWorld: PhysicsWorld;
+    private controls!: OrbitControls;
+    private physicsDebugger!: PhysicsDebugger;
 
     constructor(config: Partial<SceneConfig> = {}) {
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
         this.config = { ...DEFAULT_SCENE_CONFIG, ...config };
-        this.physicsEngine = new PhysicsEngine(this.scene);
+        this.physicsWorld = new PhysicsWorld();
         
         this.initialize();
     }
 
     private initialize(): void {  
         // Load car model first
-        this.car = new Car('/models/car-002/scene.gltf', this.config.car, (model) => {
-            this.scene.add(model);
+        const loader = new GLTFLoader();
+        loader.load('/models/car-002/scene.gltf', (gltf) => {
+            // Create car with loaded model
+            this.car = new Car(gltf.scene, this.config.car);
+            this.scene.add(gltf.scene);
+
             if (this.config.car.position) {
                 this.car.setPosition(
                     this.config.car.position.x,
@@ -40,23 +49,22 @@ export class Scene {
                 );
             }
             
-            // Initialiser la caméra à la troisième personne
+            // Initialize other components
             this.thirdPersonCamera = new ThirdPersonCamera(this.car);
-            
-            // Initialize environment
             this.environment = new Environment(this.scene, this.thirdPersonCamera, this.config);
-            
-            // Initialize renderer
             this.renderer = new Renderer(this.thirdPersonCamera, this.config, () => this.animate());
+            this.thirdPersonCamera.setRenderer(this.renderer.getRenderer());
             
-            // Ajouter la voiture au moteur physique
-            this.physicsEngine.addObject(this.car);
+            // Add to physics world
+            this.physicsWorld.addCar(this.car);
+            this.physicsWorld.addGround(this.environment.getGroundBody());
+
+            // Create physics debugger
+            this.physicsDebugger = new PhysicsDebugger(this.scene, this.physicsWorld);
             
+            // Create GUI
             this.createGUI();
         });
-
-        // Activer le mode debug pour voir les boîtes de collision
-        this.physicsEngine.setDebugMode(true);
     }
 
     private createGUI() {
@@ -104,18 +112,15 @@ export class Scene {
         // Camera settings
         const cameraFolder = this.gui.addFolder('Camera');
         const cameraConfig = {
-            offsetX: 0,
-            offsetY: 3,
-            offsetZ: 0,
+            height: 2.0,
+            distance: 6.0,
             smoothness: 0.1
         };
 
-        cameraFolder.add(cameraConfig, 'offsetX', -10, 10, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setPosition(new THREE.Vector3(value, cameraConfig.offsetY, cameraConfig.offsetZ)));
-        cameraFolder.add(cameraConfig, 'offsetY', 0, 10, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setPosition(new THREE.Vector3(cameraConfig.offsetX, value, cameraConfig.offsetZ)));
-        cameraFolder.add(cameraConfig, 'offsetZ', 0, 20, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setPosition(new THREE.Vector3(cameraConfig.offsetX, cameraConfig.offsetY, value)));
+        cameraFolder.add(cameraConfig, 'height', 1, 5, 0.1)
+            .onChange((value) => this.thirdPersonCamera.setBaseHeight(value));
+        cameraFolder.add(cameraConfig, 'distance', 3, 10, 0.1)
+            .onChange((value) => this.thirdPersonCamera.setBaseDistance(value));
         cameraFolder.add(cameraConfig, 'smoothness', 0.01, 1, 0.01)
             .onChange((value) => this.thirdPersonCamera.setSmoothness(value));
         
@@ -124,39 +129,51 @@ export class Scene {
         // Physics settings
         const physicsFolder = carFolder.addFolder('Physics');
         const physicsConfig = {
-            mass: this.car.mass,
-            friction: this.car.friction,
-            restitution: this.car.restitution
+            gravity: -9.82
         };
 
-        physicsFolder.add(physicsConfig, 'mass', 100, 2000, 100)
-            .onChange((value) => this.car.mass = value);
-        physicsFolder.add(physicsConfig, 'friction', 0, 1, 0.1)
-            .onChange((value) => this.car.friction = value);
-        physicsFolder.add(physicsConfig, 'restitution', 0, 1, 0.1)
-            .onChange((value) => this.car.restitution = value);
+        physicsFolder.add(physicsConfig, 'gravity', -20, 0, 0.1)
+            .onChange((value) => this.physicsWorld.setGravity(0, value, 0));
         
         physicsFolder.open();
         settingsFolder.open();
         carFolder.open();
+
+        // Contrôles du debugger
+        const debugFolder = this.gui.addFolder('Debug');
+        debugFolder.add(this.physicsDebugger, 'toggle').name('Toggle Physics Debug');
     }
 
     public animate() {
         const delta = this.clock.getDelta();
         
         // Update car
-        this.car.update(delta);
+        if (this.car) {
+            this.car.update(delta);
+        }
 
         // Update physics
-        this.physicsEngine.update(delta);
+        this.physicsWorld.update(delta);
 
         // Update third person camera
         if (this.thirdPersonCamera) {
             this.thirdPersonCamera.update();
         }
 
+        // Update controls
+        if (this.controls) {
+            this.controls.update();
+        }
+
+        // Update debugger
+        if (this.physicsDebugger) {
+            this.physicsDebugger.update();
+        }
+
         // Render
-        this.renderer.render(this.scene);
+        if (this.renderer) {
+            this.renderer.render(this.scene);
+        }
     }
 
     public updateConfig(newConfig: Partial<SceneConfig>): void {
@@ -165,6 +182,14 @@ export class Scene {
         this.renderer.updateConfig(newConfig);
         if (newConfig.car) {
             this.car.updateConfig(newConfig.car);
+        }
+    }
+
+    private onWindowResize(): void {
+        if (this.thirdPersonCamera && this.renderer) {
+            this.thirdPersonCamera.getCamera().aspect = window.innerWidth / window.innerHeight;
+            this.thirdPersonCamera.getCamera().updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
         }
     }
 }

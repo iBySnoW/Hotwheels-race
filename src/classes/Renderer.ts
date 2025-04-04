@@ -54,4 +54,12 @@ export class Renderer {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.config.renderer.pixelRatio));
         this.renderer.shadowMap.enabled = this.config.renderer.shadowMap;
     }
+
+    public getDomElement(): HTMLCanvasElement {
+        return this.renderer.domElement;
+    }
+
+    public setSize(width: number, height: number): void {
+        this.renderer.setSize(width, height);
+    }
 } 

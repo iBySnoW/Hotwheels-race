@@ -1,11 +1,14 @@
 import * as THREE from "three";
+import * as CANNON from 'cannon-es';
 import { Light } from "../Scene/light";
 import { AmbientLight } from "../Scene/ambientLight";
 import { SceneConfig } from "../interfaces/SceneConfig";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
+
 export class Environment {
     private scene: THREE.Scene;
     private ground!: THREE.Mesh;
+    private groundBody!: CANNON.Body;
     private camera: ThirdPersonCamera;
     private light: Light;
     private ambientLight: AmbientLight;
@@ -27,18 +30,23 @@ export class Environment {
     }
 
     private createGround(): void {
-        const geometry = new THREE.PlaneGeometry(
-            this.config.environment.groundSize,
-            this.config.environment.groundSize
-        );
+        // Créer le sol visuel
+        const geometry = new THREE.PlaneGeometry(10000, 10000); // Sol très grand
         const material = new THREE.MeshStandardMaterial({
             color: this.config.environment.groundColor,
             side: THREE.DoubleSide
         });
         this.ground = new THREE.Mesh(geometry, material);
-        this.ground.position.y = this.config.environment.groundY;
-        this.ground.rotateX(Math.PI / 2);
+        this.ground.position.y = 0; // Position à 0 pour être au même niveau que la voiture
+        this.ground.rotateX(-Math.PI / 2); // Rotation corrigée pour être horizontal
         this.ground.receiveShadow = true;
+
+        // Créer le sol physique
+        const groundShape = new CANNON.Plane();
+        this.groundBody = new CANNON.Body({ mass: 0 });
+        this.groundBody.addShape(groundShape);
+        this.groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+        this.groundBody.position.set(0, 0, 0); // Position à 0 pour correspondre au sol visuel
     }
 
     private setupLights(): void {
@@ -56,6 +64,10 @@ export class Environment {
 
     public getGround(): THREE.Mesh {
         return this.ground;
+    }
+
+    public getGroundBody(): CANNON.Body {
+        return this.groundBody;
     }
 
     public updateConfig(newConfig: Partial<SceneConfig>): void {
