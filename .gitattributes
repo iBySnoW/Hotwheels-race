@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+public/models/cartoon_race_track_-_oval/*.bin filter=lfs diff=lfs merge=lfs -text
+public/models/cartoon_race_track_-_oval/*.gltf filter=lfs diff=lfs merge=lfs -text
+public/models/cartoon_race_track_-_oval/*.png filter=lfs diff=lfs merge=lfs -text
+public/models/cartoon_race_track_-_oval/*.jpg filter=lfs diff=lfs merge=lfs -text

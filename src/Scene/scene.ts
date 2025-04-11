@@ -10,6 +10,7 @@ import { SceneConfig, DEFAULT_SCENE_CONFIG } from "../interfaces/SceneConfig";
 import { PhysicsWorld } from "../classes/PhysicsWorld";
 import { ThirdPersonCamera } from "../classes/ThirdPersonCamera";
 import { PhysicsDebugger } from '../classes/PhysicsDebugger';
+import { TrackPhysics } from '../classes/TrackPhysics';
 
 export class Scene {
     private scene: THREE.Scene;
@@ -23,12 +24,17 @@ export class Scene {
     private physicsWorld: PhysicsWorld;
     private controls!: OrbitControls;
     private physicsDebugger!: PhysicsDebugger;
+    private track!: THREE.Object3D;
+    private trackPhysics!: TrackPhysics;
+    private textureLoader: THREE.TextureLoader;
 
     constructor(config: Partial<SceneConfig> = {}) {
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x87CEEB); // Couleur bleu ciel
         this.config = { ...DEFAULT_SCENE_CONFIG, ...config };
         this.physicsWorld = new PhysicsWorld();
+        this.textureLoader = new THREE.TextureLoader();
         
         this.initialize();
     }
@@ -48,22 +54,109 @@ export class Scene {
                     this.config.car.position.z
                 );
             }
-            
-            // Initialize other components
-            this.thirdPersonCamera = new ThirdPersonCamera(this.car);
-            this.environment = new Environment(this.scene, this.thirdPersonCamera, this.config);
-            this.renderer = new Renderer(this.thirdPersonCamera, this.config, () => this.animate());
-            this.thirdPersonCamera.setRenderer(this.renderer.getRenderer());
-            
-            // Add to physics world
-            this.physicsWorld.addCar(this.car);
-            this.physicsWorld.addGround(this.environment.getGroundBody());
 
-            // Create physics debugger
-            this.physicsDebugger = new PhysicsDebugger(this.scene, this.physicsWorld);
+            // Load track model
+            const trackLoader = new GLTFLoader();
+            const loadingManager = new THREE.LoadingManager();
             
-            // Create GUI
-            this.createGUI();
+            // Debug du chargement des textures
+            loadingManager.onLoad = () => {
+                console.log('Toutes les ressources sont chargées !');
+            };
+            
+            loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+                console.log(`Chargement: ${url} (${itemsLoaded}/${itemsTotal})`);
+            };
+            
+            loadingManager.onError = (url) => {
+                console.error('Erreur lors du chargement:', url);
+            };
+
+            trackLoader.setPath('/models/cartoon_race_track_-_oval/');
+            trackLoader.manager = loadingManager;
+            
+            trackLoader.load('scene.gltf', (trackGltf) => {
+                console.log('Modèle GLTF chargé:', trackGltf);
+                this.track = trackGltf.scene;
+                
+                // Debug des matériaux
+                this.track.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        console.log('Mesh trouvé:', child.name);
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach((mat, index) => {
+                                console.log(`Material ${index}:`, mat);
+                                if (mat instanceof THREE.MeshStandardMaterial) {
+                                    // Forcer le chargement des textures
+                                    if (mat.map) {
+                                        mat.map.colorSpace = THREE.SRGBColorSpace;
+                                        mat.map.needsUpdate = true;
+                                    }
+                                    mat.needsUpdate = true;
+                                    mat.envMapIntensity = 1.0;
+                                    mat.roughness = 0.5;
+                                    mat.metalness = 0.3;
+                                    console.log(`Textures pour ${child.name}:`, {
+                                        map: mat.map,
+                                        normalMap: mat.normalMap,
+                                        roughnessMap: mat.roughnessMap
+                                    });
+                                }
+                            });
+                        } else if (child.material instanceof THREE.MeshStandardMaterial) {
+                            console.log(`Material for ${child.name}:`, child.material);
+                            // Forcer le chargement des textures
+                            if (child.material.map) {
+                                child.material.map.colorSpace = THREE.SRGBColorSpace;
+                                child.material.map.needsUpdate = true;
+                            }
+                            child.material.needsUpdate = true;
+                            child.material.envMapIntensity = 1.0;
+                            child.material.roughness = 0.5;
+                            child.material.metalness = 0.3;
+                            console.log(`Textures pour ${child.name}:`, {
+                                map: child.material.map,
+                                normalMap: child.material.normalMap,
+                                roughnessMap: child.material.roughnessMap
+                            });
+                        }
+                        
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                // Ajouter un éclairage d'ambiance plus fort
+                const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+                this.scene.add(ambientLight);
+
+                // Ajouter une lumière directionnelle plus forte
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+                directionalLight.position.set(10, 20, 10);
+                directionalLight.castShadow = true;
+                this.scene.add(directionalLight);
+
+                this.scene.add(this.track);
+                
+                // Initialiser la physique du circuit
+                this.trackPhysics = new TrackPhysics(this.physicsWorld.getWorld());
+                this.trackPhysics.createTrackBody(this.track);
+                
+                // Initialize other components
+                this.thirdPersonCamera = new ThirdPersonCamera(this.car);
+                this.environment = new Environment(this.scene, this.thirdPersonCamera, this.config);
+                this.renderer = new Renderer(this.thirdPersonCamera, this.config, () => this.animate());
+                this.thirdPersonCamera.setRenderer(this.renderer.getRenderer());
+                
+                // Add car to physics world
+                this.physicsWorld.addCar(this.car);
+
+                // Create physics debugger
+                this.physicsDebugger = new PhysicsDebugger(this.scene, this.physicsWorld);
+                
+                // Create GUI
+                this.createGUI();
+            });
         });
     }
 
@@ -147,13 +240,16 @@ export class Scene {
     public animate() {
         const delta = this.clock.getDelta();
         
+        // Limiter le delta time pour éviter les sauts physiques
+        const fixedDelta = Math.min(delta, 1/60);
+        
         // Update car
         if (this.car) {
-            this.car.update(delta);
+            this.car.update(fixedDelta);
         }
 
-        // Update physics
-        this.physicsWorld.update(delta);
+        // Update physics with fixed timestep
+        this.physicsWorld.update(fixedDelta);
 
         // Update third person camera
         if (this.thirdPersonCamera) {
@@ -165,8 +261,8 @@ export class Scene {
             this.controls.update();
         }
 
-        // Update debugger
-        if (this.physicsDebugger) {
+        // Update debugger only if enabled
+        if (this.physicsDebugger && this.physicsDebugger.isEnabled()) {
             this.physicsDebugger.update();
         }
 

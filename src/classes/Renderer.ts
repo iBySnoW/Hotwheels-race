@@ -19,12 +19,20 @@ export class Renderer {
     private createRenderer(): THREE.WebGLRenderer {
         const renderer = new THREE.WebGLRenderer({
             antialias: this.config.renderer.antialias,
-            canvas: document.querySelector('canvas') as HTMLCanvasElement
+            canvas: document.querySelector('canvas') as HTMLCanvasElement,
+            alpha: true,
+            powerPreference: "high-performance"
         });
 
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.config.renderer.pixelRatio));
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = this.config.renderer.shadowMap;
+        
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        
         renderer.setAnimationLoop(this.animationCallback);
 
         return renderer;

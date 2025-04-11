@@ -128,3 +128,5 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+public/models/cartoon_race_track_-_oval/textures/road_normal.jpeg
+public/models/cartoon_race_track_-_oval/scene.bin

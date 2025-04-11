@@ -78,7 +78,12 @@ export class PhysicsDebugger {
                     mesh.quaternion.copy(body.quaternion as any);
 
                     const material = mesh.material as THREE.MeshBasicMaterial;
-                    material.color.setHex(0xff0000); // Rouge pour le châssis
+                    // Couleur différente selon le type de corps
+                    if (body.type === CANNON.Body.STATIC) {
+                        material.color.setHex(0x00ff00); // Vert pour les corps statiques (circuit)
+                    } else {
+                        material.color.setHex(0xff0000); // Rouge pour les corps dynamiques (voiture)
+                    }
                 }
 
                 meshIndex++;
@@ -122,6 +127,22 @@ export class PhysicsDebugger {
                 geometry = new THREE.PlaneGeometry(10, 10);
                 break;
 
+            case CANNON.Shape.types.TRIMESH:
+                const trimeshShape = shape as CANNON.Trimesh;
+                geometry = new THREE.BufferGeometry();
+                
+                // Créer les attributs de la géométrie
+                const vertices = new Float32Array(trimeshShape.vertices);
+                const indices = new Uint16Array(trimeshShape.indices);
+                
+                // Définir les attributs de la géométrie
+                geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                
+                // Calculer les normales pour un meilleur rendu
+                geometry.computeVertexNormals();
+                break;
+
             default:
                 return null;
         }
@@ -149,5 +170,9 @@ export class PhysicsDebugger {
             this.debugMeshes = [];
         }
         this.axesHelper.visible = enabled;
+    }
+
+    public isEnabled(): boolean {
+        return this.enabled;
     }
 } 

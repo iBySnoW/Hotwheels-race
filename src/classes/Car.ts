@@ -27,7 +27,7 @@ export class Car {
 
     // Constantes de configuration des roues
     private static readonly WHEEL_CONFIG = {
-        radius: 0.25,
+        radius: 0.4,
         directionLocal: new CANNON.Vec3(0, -1, 0),
         axleLocal: new CANNON.Vec3(-1, 0, 0),
         suspensionStiffness: 30,
@@ -124,27 +124,54 @@ export class Car {
     private initializePhysics(model: THREE.Group, config: Partial<CarConfig>): void {
         const position = config.position || { x: 0, y: 1, z: 0 };
         
-        // Créer le corps du châssis physique
-        const box = new THREE.Box3().setFromObject(model);
-        const size = box.getSize(new THREE.Vector3());
-        
-        const chassisShape = new CANNON.Box(new CANNON.Vec3(
-            size.x * 0.35,
-            size.y * 0.25,
-            size.z * 0.4
-        ));
-        
+        // Créer le matériau du châssis
         const chassisMaterial = new CANNON.Material('chassis');
         
+        // Créer le corps du châssis physique
         this.body = new CANNON.Body({ 
             mass: 800,
             material: chassisMaterial,
             angularDamping: 0.5,
             linearDamping: 0.1
         });
-        this.body.addShape(chassisShape);
-        this.body.position.set(position.x, position.y + 0.5, position.z);
-        
+
+        // Parcourir le modèle pour trouver le châssis
+        model.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.geometry) {
+                const mesh = child;
+                const geometry = mesh.geometry;
+                
+                if (geometry.attributes.position) {
+                    // Obtenir les vertices et indices de la géométrie
+                    const vertices = geometry.attributes.position.array;
+                    const indices = geometry.index ? geometry.index.array : null;
+
+                    // Créer un shape trimesh pour la géométrie
+                    const shape = new CANNON.Trimesh(
+                        Array.from(vertices as Float32Array),
+                        indices ? Array.from(indices) : []
+                    );
+
+                    // Calculer la transformation complète du mesh
+                    mesh.updateMatrixWorld(true);
+                    const worldMatrix = mesh.matrixWorld.clone();
+
+                    // Décomposer la matrice en position, rotation et échelle
+                    const meshPosition = new THREE.Vector3();
+                    const quaternion = new THREE.Quaternion();
+                    const scale = new THREE.Vector3();
+                    worldMatrix.decompose(meshPosition, quaternion, scale);
+
+                    // Appliquer la position et rotation au corps
+                    this.body!.position.copy(meshPosition as any);
+                    this.body!.quaternion.copy(quaternion as any);
+
+                    // Ajouter le shape au corps
+                    this.body!.addShape(shape);
+                }
+            }
+        });
+
         // Positionner le modèle
         model.position.copy(this.body.position as any);
         model.rotation.y = 0;
@@ -157,9 +184,6 @@ export class Car {
             indexForwardAxis: 2,  // z
             indexUpAxis: 1  // y
         });
-
-        // Ajouter des helpers visuels pour le debug
-        model.add(new THREE.AxesHelper(1));
     }
 
     private initializeWheels(model: THREE.Group): void {
@@ -206,9 +230,6 @@ export class Car {
     }
 
     private addWheelHelpers(wheelMesh: THREE.Object3D, wheelIndex: number, model: THREE.Group): void {
-        // Helper de la boîte englobante
-        wheelMesh.add(new THREE.BoxHelper(wheelMesh, 0xffff00));
-
         // Corps physique de la roue
         const wheelBody = new CANNON.Body({
             mass: 1,
@@ -217,28 +238,42 @@ export class Car {
             collisionFilterGroup: 0,
             collisionFilterMask: 0
         });
-        wheelBody.addShape(new CANNON.Sphere(Car.WHEEL_CONFIG.radius));
-        wheelBody.position.copy(this.body!.position);
+
+        // Parcourir le mesh de la roue pour créer le Trimesh
+        if (wheelMesh instanceof THREE.Mesh && wheelMesh.geometry) {
+            const geometry = wheelMesh.geometry;
+            
+            if (geometry.attributes.position) {
+                // Obtenir les vertices et indices de la géométrie
+                const vertices = geometry.attributes.position.array;
+                const indices = geometry.index ? geometry.index.array : null;
+
+                // Créer un shape trimesh pour la géométrie
+                const shape = new CANNON.Trimesh(
+                    Array.from(vertices as Float32Array),
+                    indices ? Array.from(indices) : []
+                );
+
+                // Calculer la transformation complète du mesh
+                wheelMesh.updateMatrixWorld(true);
+                const worldMatrix = wheelMesh.matrixWorld.clone();
+
+                // Décomposer la matrice en position, rotation et échelle
+                const meshPosition = new THREE.Vector3();
+                const quaternion = new THREE.Quaternion();
+                const scale = new THREE.Vector3();
+                worldMatrix.decompose(meshPosition, quaternion, scale);
+
+                // Appliquer la position et rotation au corps
+                wheelBody.position.copy(meshPosition as any);
+                wheelBody.quaternion.copy(quaternion as any);
+
+                // Ajouter le shape au corps
+                wheelBody.addShape(shape);
+            }
+        }
+
         this.wheelBodies[wheelIndex] = wheelBody;
-
-        // Sphère de visualisation physique
-        const sphereMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(Car.WHEEL_CONFIG.radius),
-            new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
-        );
-        sphereMesh.position.copy(wheelBody.position as any);
-        sphereMesh.position.y -= Car.WHEEL_CONFIG.suspensionRestLength / 2;
-        model.add(sphereMesh);
-
-        // Helper de suspension
-        const rayGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(0, -Car.WHEEL_CONFIG.suspensionRestLength * 2, 0)
-        ]);
-        wheelMesh.add(new THREE.Line(
-            rayGeometry,
-            new THREE.LineBasicMaterial({ color: 0xff0000 })
-        ));
     }
 
     // Méthodes de mise à jour
@@ -416,20 +451,6 @@ export class Car {
                     }
                 }
             }
-        });
-
-        console.log('Positions des roues trouvées:', {
-            frontLeft: (frontLeft as THREE.Object3D | null)?.position,
-            frontRight: (frontRight as THREE.Object3D | null)?.position,
-            backLeft: (backLeft as THREE.Object3D | null)?.position,
-            backRight: (backRight as THREE.Object3D | null)?.position
-        });
-        
-        console.log('Wheel mesh positions:', {
-            frontLeft: (frontLeft as THREE.Object3D | null)?.position,
-            frontRight: (frontRight as THREE.Object3D | null)?.position,
-            backLeft: (backLeft as THREE.Object3D | null)?.position,
-            backRight: (backRight as THREE.Object3D | null)?.position
         });
 
         // Si aucune roue n'est trouvée avec les noms, on essaie de les déduire par leur position
