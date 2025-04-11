@@ -42,7 +42,7 @@ export class Scene {
     private initialize(): void {  
         // Load car model first
         const loader = new GLTFLoader();
-        loader.load('/models/car-002/scene.gltf', (gltf) => {
+        loader.load('/models/car-002/scene_opti.glb', (gltf) => {
             // Create car with loaded model
             this.car = new Car(gltf.scene, this.config.car);
             this.scene.add(gltf.scene);
@@ -75,17 +75,15 @@ export class Scene {
             trackLoader.setPath('/models/cartoon_race_track_-_oval/');
             trackLoader.manager = loadingManager;
             
-            trackLoader.load('scene.gltf', (trackGltf) => {
+            trackLoader.load('scene_opti.glb', (trackGltf) => {
                 console.log('Modèle GLTF chargé:', trackGltf);
                 this.track = trackGltf.scene;
                 
                 // Debug des matériaux
                 this.track.traverse((child) => {
                     if (child instanceof THREE.Mesh) {
-                        console.log('Mesh trouvé:', child.name);
                         if (Array.isArray(child.material)) {
                             child.material.forEach((mat, index) => {
-                                console.log(`Material ${index}:`, mat);
                                 if (mat instanceof THREE.MeshStandardMaterial) {
                                     // Forcer le chargement des textures
                                     if (mat.map) {
@@ -96,11 +94,6 @@ export class Scene {
                                     mat.envMapIntensity = 1.0;
                                     mat.roughness = 0.5;
                                     mat.metalness = 0.3;
-                                    console.log(`Textures pour ${child.name}:`, {
-                                        map: mat.map,
-                                        normalMap: mat.normalMap,
-                                        roughnessMap: mat.roughnessMap
-                                    });
                                 }
                             });
                         } else if (child.material instanceof THREE.MeshStandardMaterial) {
@@ -114,11 +107,6 @@ export class Scene {
                             child.material.envMapIntensity = 1.0;
                             child.material.roughness = 0.5;
                             child.material.metalness = 0.3;
-                            console.log(`Textures pour ${child.name}:`, {
-                                map: child.material.map,
-                                normalMap: child.material.normalMap,
-                                roughnessMap: child.material.roughnessMap
-                            });
                         }
                         
                         child.castShadow = true;
