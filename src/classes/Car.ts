@@ -313,8 +313,12 @@ export class Car {
             this.vehicle.applyEngineForce(-maxForce * 0.05, 0);
             this.vehicle.applyEngineForce(-maxForce * 0.05, 1);
         } else if (this.controls.isKeyPressed('z')) {
-            this.vehicle.applyEngineForce(maxForce * 0.5, 2);
-            this.vehicle.applyEngineForce(maxForce * 0.5, 3);
+            // Propulsion arrière principale
+            this.vehicle.applyEngineForce(maxForce, 2);
+            this.vehicle.applyEngineForce(maxForce, 3);
+            // Légère assistance avant
+            this.vehicle.applyEngineForce(maxForce * 0.05, 0);
+            this.vehicle.applyEngineForce(maxForce * 0.05, 1);
         } else {
             // Frein moteur progressif
             const engineBrakeForce = this.getSpeed() * 5;
