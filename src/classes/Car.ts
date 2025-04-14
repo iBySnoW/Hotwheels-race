@@ -35,12 +35,27 @@ export class Car {
         frictionSlip: 1.5,
         dampingRelaxation: 2.3,
         dampingCompression: 4.4,
-        maxSuspensionForce: 50000,
-        rollInfluence: 0.01,
+        maxSuspensionForce: 100000,
+        rollInfluence: 0.08,
         maxSuspensionTravel: 0.3,
         customSlidingRotationalSpeed: -30,
         useCustomSlidingRotationalSpeed: true,
     };
+
+    // Propriétés pour le drift
+    private isDrifting: boolean = false;
+    private driftFactor: number = 0;
+    private readonly DRIFT_FACTOR_INCREASE: number = 0.1;
+    private readonly DRIFT_FACTOR_DECREASE: number = 0.95;
+    private readonly MAX_DRIFT_FACTOR: number = 1.0;
+    private isDriftDetected: boolean = false;
+
+    // Ajout de nouvelles propriétés pour le drift
+    private readonly DRIFT_FRICTION_REDUCTION = 0.4;  // Réduction de friction pendant le drift
+    private readonly DRIFT_ANGLE_FACTOR = 0.8;       // Facteur d'angle de drift
+    private readonly WEIGHT_TRANSFER_FACTOR = 0.15;   // Facteur de transfert de poids
+    private driftAngle: number = 0;                   // Angle actuel de drift
+    private lateralVelocity: number = 0;             // Vitesse latérale
 
     constructor(model: THREE.Group, config: Partial<CarConfig> = {}) {
         this.model = model;
@@ -215,11 +230,11 @@ export class Car {
 
         // Ajuster les paramètres selon la position de la roue
         if (index < 2) {
-            wheelOptions.suspensionStiffness = 35;
             wheelOptions.frictionSlip = 2.0;
+            wheelOptions.rollInfluence = 0.08;
         } else {
-            wheelOptions.suspensionStiffness = 25;
-            wheelOptions.frictionSlip = 1.8;
+            wheelOptions.frictionSlip = 1.2;
+            wheelOptions.rollInfluence = 0.05;
         }
 
         const wheelIndex = this.vehicle.addWheel(wheelOptions);
@@ -288,14 +303,15 @@ export class Car {
     private updateVehicleControls(): void {
         if (!this.vehicle) return;
 
-        const maxSteerVal = 0.5;
-        const maxForce = 1500;
+        const maxSteerVal = 0.8;
+        const maxForce = 3000;
         const brakeForce = 50;
 
-        // Calculer la vitesse actuelle et le facteur de direction
+        // Ajustement de la direction en fonction du drift
+        const steeringFactor = this.isDrifting ? 1.2 : 1.0;  // Plus de réactivité pendant le drift
         const speed = this.getSpeed();
-        const speedFactor = Math.max(0.3, 1 - speed / 30);
-        const currentMaxSteer = maxSteerVal * speedFactor;
+        const speedFactor = Math.max(0.4, 1 - speed / 50);
+        const currentMaxSteer = maxSteerVal * speedFactor * steeringFactor;
 
         this.handleAcceleration(maxForce);
         this.handleBraking(brakeForce);
@@ -305,55 +321,144 @@ export class Car {
     private handleAcceleration(maxForce: number): void {
         if (!this.vehicle) return;
 
+        // Augmenter la force maximale pour plus de puissance
+        maxForce = 4500;  // Augmentation significative de la puissance (était 1500)
+
+        // Calculer la force en fonction de la vitesse et du drift
+        const speed = this.getSpeed();
+        const speedFactor = Math.max(0.6, 1 - speed / 80);  // Réduction moins importante de la puissance à haute vitesse
+        const engineForce = maxForce * speedFactor;
+
         if (this.controls.isKeyPressed('s')) {
-            // Propulsion arrière principale
-            this.vehicle.applyEngineForce(-maxForce, 2);
-            this.vehicle.applyEngineForce(-maxForce, 3);
-            // Légère assistance avant
-            this.vehicle.applyEngineForce(-maxForce * 0.05, 0);
-            this.vehicle.applyEngineForce(-maxForce * 0.05, 1);
+            // Propulsion arrière pure avec puissance réduite en marche arrière
+            const reverseForce = engineForce * 0.7;  // 70% de la puissance en marche arrière
+            this.vehicle.applyEngineForce(-reverseForce, 2);
+            this.vehicle.applyEngineForce(-reverseForce, 3);
+            // Aucune force sur les roues avant
+            this.vehicle.applyEngineForce(0, 0);
+            this.vehicle.applyEngineForce(0, 1);
         } else if (this.controls.isKeyPressed('z')) {
-            // Propulsion arrière principale
-            this.vehicle.applyEngineForce(maxForce, 2);
-            this.vehicle.applyEngineForce(maxForce, 3);
-            // Légère assistance avant
-            this.vehicle.applyEngineForce(maxForce * 0.05, 0);
-            this.vehicle.applyEngineForce(maxForce * 0.05, 1);
+            // Propulsion arrière pure avec pleine puissance
+            this.vehicle.applyEngineForce(engineForce, 2);
+            this.vehicle.applyEngineForce(engineForce, 3);
+            // Aucune force sur les roues avant
+            this.vehicle.applyEngineForce(0, 0);
+            this.vehicle.applyEngineForce(0, 1);
         } else {
-            // Frein moteur progressif
-            const engineBrakeForce = this.getSpeed() * 5;
-            for (let i = 0; i < 4; i++) {
-                this.vehicle.applyEngineForce(engineBrakeForce * Math.sign(this.body!.velocity.z), i);
-            }
+            // Frein moteur progressif uniquement sur les roues arrière
+            const engineBrakeForce = Math.min(this.getSpeed() * 3, maxForce * 0.3);  // Frein moteur plus fort
+            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z), 2);
+            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z), 3);
+            this.vehicle.applyEngineForce(0, 0);
+            this.vehicle.applyEngineForce(0, 1);
         }
     }
 
     private handleBraking(brakeForce: number): void {
         if (!this.vehicle) return;
 
-        if (this.controls.isKeyPressed(' ')) {
-            // Répartition du freinage 60/40
-            this.vehicle.setBrake(brakeForce * 0.6, 0);
-            this.vehicle.setBrake(brakeForce * 0.6, 1);
-            this.vehicle.setBrake(brakeForce * 0.4, 2);
-            this.vehicle.setBrake(brakeForce * 0.4, 3);
+        if (this.controls.isKeyPressed('space')) {
+            // Déclencher le drift
+            this.isDrifting = true;
+            
+            // Augmenter progressivement le facteur de drift
+            if (this.driftFactor < this.MAX_DRIFT_FACTOR) {
+                this.driftFactor += this.DRIFT_FACTOR_INCREASE;
+            }
+
+            // Réduire la friction des roues arrière pendant le drift
+            const rearWheelFriction = this.DRIFT_FRICTION_REDUCTION;
+            this.vehicle.wheelInfos[2].frictionSlip = rearWheelFriction;
+            this.vehicle.wheelInfos[3].frictionSlip = rearWheelFriction;
+
+            // Appliquer un freinage plus fort sur les roues arrière pour le frein à main
+            this.vehicle.setBrake(brakeForce * 5, 2);  // Force de freinage x5 sur roue arrière gauche
+            this.vehicle.setBrake(brakeForce * 5, 3);  // Force de freinage x5 sur roue arrière droite
+            // Freinage léger sur les roues avant pour permettre le contrôle
+            this.vehicle.setBrake(brakeForce * 0.2, 0);
+            this.vehicle.setBrake(brakeForce * 0.2, 1);
+
+            // Annuler toute force moteur pendant le freinage
+            this.vehicle.applyEngineForce(0, 2);
+            this.vehicle.applyEngineForce(0, 3);
+
+            // Appliquer une force centrifuge simulée
+            if (this.body) {
+                const speed = this.getSpeed();
+                const steeringAngle = this.vehicle.wheelInfos[0].steering;
+                const centrifugalForce = speed * speed * Math.abs(steeringAngle) * 0.1;
+                const direction = new CANNON.Vec3(
+                    Math.sin(this.body.quaternion.z),
+                    0,
+                    Math.cos(this.body.quaternion.z)
+                );
+                this.body.applyLocalForce(
+                    new CANNON.Vec3(direction.x * centrifugalForce, 0, direction.z * centrifugalForce),
+                    new CANNON.Vec3(0, 0, 0)
+                );
+            }
         } else {
+            // Réduire progressivement le facteur de drift
+            this.driftFactor *= this.DRIFT_FACTOR_DECREASE;
+            this.isDrifting = false;
+
+            // Rétablir la friction normale des roues
+            const normalFriction = 1.5;
+            this.vehicle.wheelInfos[2].frictionSlip = normalFriction;
+            this.vehicle.wheelInfos[3].frictionSlip = normalFriction;
+
             for (let i = 0; i < 4; i++) {
                 this.vehicle.setBrake(0, i);
             }
+        }
+
+        // Détection du drift
+        if (this.vehicle.wheelInfos.length >= 4) {
+            const leftRear = this.vehicle.wheelInfos[2];
+            const rightRear = this.vehicle.wheelInfos[3];
+            this.isDriftDetected = Math.abs(leftRear.sideImpulse) > 5 || Math.abs(rightRear.sideImpulse) > 5;
         }
     }
 
     private handleSteering(maxSteer: number): void {
         if (!this.vehicle) return;
 
+        // Augmenter l'angle de braquage maximum
+        maxSteer = 0.8;
+
+        // Ajouter un facteur de vitesse pour le braquage
+        const speed = this.getSpeed();
+        const speedFactor = Math.max(0.4, 1 - speed / 50);
+        
+        // Augmenter l'angle de braquage pendant le drift
+        const driftMultiplier = this.isDrifting ? 1.5 : 1.0;
+        const currentMaxSteer = maxSteer * speedFactor * driftMultiplier;
+
+        let targetSteering = 0;
         if (this.controls.isKeyPressed('q')) {
-            this.setSteeringAngle(maxSteer);
+            targetSteering = currentMaxSteer;
         } else if (this.controls.isKeyPressed('d')) {
-            this.setSteeringAngle(-maxSteer);
-        } else {
-            this.returnSteeringToCenter();
+            targetSteering = -currentMaxSteer;
         }
+
+        // Appliquer le contre-braquage automatique pendant le drift
+        if (this.isDrifting && this.body) {
+            // Calculer l'angle de dérapage
+            const velocity = new THREE.Vector3(this.body.velocity.x, 0, this.body.velocity.z);
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.body.quaternion as any);
+            const driftAngle = Math.atan2(
+                velocity.cross(forward).y,
+                velocity.dot(forward)
+            );
+
+            // Calculer le contre-braquage en fonction de l'angle de dérapage
+            const counterSteer = -driftAngle * this.DRIFT_ANGLE_FACTOR;
+            
+            // Mélanger le braquage du joueur avec le contre-braquage automatique
+            targetSteering = targetSteering * 0.7 + counterSteer * 0.3;
+        }
+
+        this.setSteeringAngle(targetSteering);
     }
 
     private setSteeringAngle(angle: number): void {
@@ -370,7 +475,8 @@ export class Car {
         if (!this.vehicle) return;
 
         const currentSteer = this.vehicle.wheelInfos[0].steering;
-        const steerReduction = Math.sign(currentSteer) * Math.min(Math.abs(currentSteer), 0.1);
+        // Augmenter la vitesse de retour du volant
+        const steerReduction = Math.sign(currentSteer) * Math.min(Math.abs(currentSteer), 0.25);
         this.setSteeringAngle(currentSteer - steerReduction);
     }
 

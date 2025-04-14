@@ -30,7 +30,7 @@ export const DEFAULT_SCENE_CONFIG: SceneConfig = {
         rotationSpeed: 0.1,  // Vitesse de rotation en rad/s
         position: {
             x: 0,
-            y: 20,
+            y:5,
             z: 0
         }
     },

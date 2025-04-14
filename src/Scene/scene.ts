@@ -26,7 +26,6 @@ export class Scene {
     private physicsDebugger!: PhysicsDebugger;
     private track!: THREE.Object3D;
     private trackPhysics!: TrackPhysics;
-    private textureLoader: THREE.TextureLoader;
 
     constructor(config: Partial<SceneConfig> = {}) {
         this.clock = new THREE.Clock();
@@ -34,7 +33,6 @@ export class Scene {
         this.scene.background = new THREE.Color(0x87CEEB); // Couleur bleu ciel
         this.config = { ...DEFAULT_SCENE_CONFIG, ...config };
         this.physicsWorld = new PhysicsWorld();
-        this.textureLoader = new THREE.TextureLoader();
         
         this.initialize();
     }
@@ -75,7 +73,7 @@ export class Scene {
             trackLoader.setPath('/models/cartoon_race_track_-_oval/');
             trackLoader.manager = loadingManager;
             
-            trackLoader.load('scene_opti.glb', (trackGltf) => {
+            trackLoader.load('drift_clash_uluru.glb', (trackGltf) => {
                 console.log('Modèle GLTF chargé:', trackGltf);
                 this.track = trackGltf.scene;
                 
@@ -141,6 +139,7 @@ export class Scene {
 
                 // Create physics debugger
                 this.physicsDebugger = new PhysicsDebugger(this.scene, this.physicsWorld);
+                this.physicsDebugger.setCar(this.car);
                 
                 // Create GUI
                 this.createGUI();
@@ -151,78 +150,22 @@ export class Scene {
     private createGUI() {
         this.gui = new GUI({ width: 300 });
         
-        // Car controls
-        const carFolder = this.gui.addFolder('Car Controls');
-        const car = this.car;
-        
-        // Position controls
-        const positionFolder = carFolder.addFolder('Position');
-        const model = car.getModel();
-        if (model) {
-            positionFolder.add(model.position, 'x', -10, 10, 0.1);
-            positionFolder.add(model.position, 'y', -10, 10, 0.1);
-            positionFolder.add(model.position, 'z', -10, 10, 0.1);
-            positionFolder.open();
-        }
-
-        // Car settings
-        const settingsFolder = carFolder.addFolder('Settings');
-        const config = { ...this.config.car };
-
-        settingsFolder.add(config, 'maxSpeed', 0.1, 1, 0.1)
-            .onChange((value) => {
-                this.config.car.maxSpeed = value;
-                car.updateConfig({ maxSpeed: value });
-            });
-        settingsFolder.add(config, 'acceleration', 0.001, 0.1, 0.001)
-            .onChange((value) => {
-                this.config.car.acceleration = value;
-                car.updateConfig({ acceleration: value });
-            });
-        settingsFolder.add(config, 'deceleration', 0.001, 0.1, 0.001)
-            .onChange((value) => {
-                this.config.car.deceleration = value;
-                car.updateConfig({ deceleration: value });
-            });
-        settingsFolder.add(config, 'rotationSpeed', 0.01, 0.2, 0.01)
-            .onChange((value) => {
-                this.config.car.rotationSpeed = value;
-                car.updateConfig({ rotationSpeed: value });
-            });
-
-        // Camera settings
-        const cameraFolder = this.gui.addFolder('Camera');
-        const cameraConfig = {
-            height: 2.0,
-            distance: 6.0,
-            smoothness: 0.1
-        };
-
-        cameraFolder.add(cameraConfig, 'height', 1, 5, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setBaseHeight(value));
-        cameraFolder.add(cameraConfig, 'distance', 3, 10, 0.1)
-            .onChange((value) => this.thirdPersonCamera.setBaseDistance(value));
-        cameraFolder.add(cameraConfig, 'smoothness', 0.01, 1, 0.01)
-            .onChange((value) => this.thirdPersonCamera.setSmoothness(value));
-        
-        cameraFolder.open();
-
-        // Physics settings
-        const physicsFolder = carFolder.addFolder('Physics');
-        const physicsConfig = {
-            gravity: -9.82
-        };
-
-        physicsFolder.add(physicsConfig, 'gravity', -20, 0, 0.1)
-            .onChange((value) => this.physicsWorld.setGravity(0, value, 0));
-        
-        physicsFolder.open();
-        settingsFolder.open();
-        carFolder.open();
-
         // Contrôles du debugger
         const debugFolder = this.gui.addFolder('Debug');
         debugFolder.add(this.physicsDebugger, 'toggle').name('Toggle Physics Debug');
+        
+        // Informations de debug
+        const debugInfo = this.physicsDebugger.getDebugInfo();
+        const debugInfoFolder = debugFolder.addFolder('Debug Info');
+        
+        // Ajouter les informations de debug
+        debugInfoFolder.add(debugInfo, 'speed').name('Speed').listen();
+        debugInfoFolder.add(debugInfo.position, 'x').name('Position X').listen();
+        debugInfoFolder.add(debugInfo.position, 'y').name('Position Y').listen();
+        debugInfoFolder.add(debugInfo.position, 'z').name('Position Z').listen();
+        debugInfoFolder.add(debugInfo.rotation, 'y').name('Rotation Y').listen();
+        
+        debugInfoFolder.open();
     }
 
     public animate() {

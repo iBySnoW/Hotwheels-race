@@ -2,6 +2,7 @@ import * as CANNON from 'cannon-es';
 import * as THREE from 'three';
 import { PhysicsWorld } from './PhysicsWorld';
 import CannonDebugRenderer from 'cannon-es-debugger';
+import { Car } from './Car';
 
 export class PhysicsDebugger {
     private scene: THREE.Scene;
@@ -9,6 +10,16 @@ export class PhysicsDebugger {
     private debugMeshes: THREE.Mesh[] = [];
     private enabled: boolean = true;
     private axesHelper: THREE.AxesHelper;
+    private car: Car | null = null;
+    private debugInfo: {
+        speed: number;
+        position: THREE.Vector3;
+        rotation: THREE.Vector3;
+    } = {
+        speed: 0,
+        position: new THREE.Vector3(),
+        rotation: new THREE.Vector3()
+    };
 
     constructor(scene: THREE.Scene, world: PhysicsWorld) {
         this.scene = scene;
@@ -20,8 +31,19 @@ export class PhysicsDebugger {
         this.scene.add(this.axesHelper);
     }
 
+    public setCar(car: Car): void {
+        this.car = car;
+    }
+
     public update(): void {
         if (!this.enabled) return;
+
+        // Mettre à jour les informations de debug si une voiture est définie
+        if (this.car) {
+            this.debugInfo.speed = this.car.getSpeed();
+            this.debugInfo.position = this.car.getPosition();
+            this.debugInfo.rotation = this.car.getRotation();
+        }
 
         let meshIndex = 0;
 
@@ -174,5 +196,9 @@ export class PhysicsDebugger {
 
     public isEnabled(): boolean {
         return this.enabled;
+    }
+
+    public getDebugInfo(): any {
+        return this.debugInfo;
     }
 } 
