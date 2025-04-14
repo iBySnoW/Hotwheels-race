@@ -10,22 +10,18 @@ interface WheelGroup {
 }
 
 export class Car {
-    // Propriétés privées
-    private speed: number = 0;
+    // Composants essentiels
+    private model: THREE.Group | null = null;
     private config: CarConfig;
     private controls: CarControls;
-    private currentRotation: number = 0;
 
     // Composants physiques
     private body: CANNON.Body | null = null;
     private vehicle: CANNON.RaycastVehicle | null = null;
     private wheelBodies: CANNON.Body[] = [];
-
-    // Composants visuels
-    private model: THREE.Group | null = null;
     private wheelMeshes: THREE.Object3D[] = [];
 
-    // Constantes de configuration des roues
+    // Configuration des roues
     private static readonly WHEEL_CONFIG = {
         radius: 0.4,
         directionLocal: new CANNON.Vec3(0, -1, 0),
@@ -42,20 +38,30 @@ export class Car {
         useCustomSlidingRotationalSpeed: true,
     };
 
-    // Propriétés pour le drift
+    // Configuration du drift
+    private static readonly DRIFT_CONFIG = {
+        FRICTION_REDUCTION: 0.4,    // Réduction de friction pendant le drift
+        ANGLE_FACTOR: 0.8,         // Facteur d'angle de drift
+        FACTOR_INCREASE: 0.1,      // Vitesse d'augmentation du drift
+        FACTOR_DECREASE: 0.95,     // Vitesse de diminution du drift
+        MAX_FACTOR: 1.0,          // Facteur de drift maximum
+        COUNTER_STEER_RATIO: 0.3,  // Ratio de contre-braquage automatique (0.3 = 30%)
+        PLAYER_STEER_RATIO: 0.7    // Ratio de contrôle joueur (0.7 = 70%)
+    };
+
+    // États du véhicule
     private isDrifting: boolean = false;
     private driftFactor: number = 0;
-    private readonly DRIFT_FACTOR_INCREASE: number = 0.1;
-    private readonly DRIFT_FACTOR_DECREASE: number = 0.95;
-    private readonly MAX_DRIFT_FACTOR: number = 1.0;
     private isDriftDetected: boolean = false;
 
-    // Ajout de nouvelles propriétés pour le drift
-    private readonly DRIFT_FRICTION_REDUCTION = 0.4;  // Réduction de friction pendant le drift
-    private readonly DRIFT_ANGLE_FACTOR = 0.8;       // Facteur d'angle de drift
-    private readonly WEIGHT_TRANSFER_FACTOR = 0.15;   // Facteur de transfert de poids
-    private driftAngle: number = 0;                   // Angle actuel de drift
-    private lateralVelocity: number = 0;             // Vitesse latérale
+    // Constantes de physique
+    private static readonly PHYSICS_CONFIG = {
+        MAX_FORCE: 4500,           // Force moteur maximale
+        MAX_STEER: 0.8,           // Angle de braquage maximum
+        BRAKE_FORCE: 50,          // Force de freinage de base
+        REVERSE_POWER_RATIO: 0.7,  // Ratio de puissance en marche arrière (70%)
+        ENGINE_BRAKE_FACTOR: 3     // Facteur de frein moteur
+    };
 
     constructor(model: THREE.Group, config: Partial<CarConfig> = {}) {
         this.model = model;
@@ -190,7 +196,6 @@ export class Car {
         // Positionner le modèle
         model.position.copy(this.body.position as any);
         model.rotation.y = 0;
-        this.currentRotation = 0;
         
         // Configuration du véhicule
         this.vehicle = new CANNON.RaycastVehicle({
@@ -362,12 +367,12 @@ export class Car {
             this.isDrifting = true;
             
             // Augmenter progressivement le facteur de drift
-            if (this.driftFactor < this.MAX_DRIFT_FACTOR) {
-                this.driftFactor += this.DRIFT_FACTOR_INCREASE;
+            if (this.driftFactor < Car.DRIFT_CONFIG.MAX_FACTOR) {
+                this.driftFactor += Car.DRIFT_CONFIG.FACTOR_INCREASE;
             }
 
             // Réduire la friction des roues arrière pendant le drift
-            const rearWheelFriction = this.DRIFT_FRICTION_REDUCTION;
+            const rearWheelFriction = Car.DRIFT_CONFIG.FRICTION_REDUCTION;
             this.vehicle.wheelInfos[2].frictionSlip = rearWheelFriction;
             this.vehicle.wheelInfos[3].frictionSlip = rearWheelFriction;
 
@@ -399,7 +404,7 @@ export class Car {
             }
         } else {
             // Réduire progressivement le facteur de drift
-            this.driftFactor *= this.DRIFT_FACTOR_DECREASE;
+            this.driftFactor *= Car.DRIFT_CONFIG.FACTOR_DECREASE;
             this.isDrifting = false;
 
             // Rétablir la friction normale des roues
@@ -452,10 +457,10 @@ export class Car {
             );
 
             // Calculer le contre-braquage en fonction de l'angle de dérapage
-            const counterSteer = -driftAngle * this.DRIFT_ANGLE_FACTOR;
+            const counterSteer = -driftAngle * Car.DRIFT_CONFIG.ANGLE_FACTOR;
             
             // Mélanger le braquage du joueur avec le contre-braquage automatique
-            targetSteering = targetSteering * 0.7 + counterSteer * 0.3;
+            targetSteering = targetSteering * Car.DRIFT_CONFIG.PLAYER_STEER_RATIO + counterSteer * Car.DRIFT_CONFIG.COUNTER_STEER_RATIO;
         }
 
         this.setSteeringAngle(targetSteering);

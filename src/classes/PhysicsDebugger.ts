@@ -8,7 +8,7 @@ export class PhysicsDebugger {
     private scene: THREE.Scene;
     private physicsWorld: CANNON.World;
     private debugMeshes: THREE.Mesh[] = [];
-    private enabled: boolean = true;
+    private enabled: boolean = false;
     private axesHelper: THREE.AxesHelper;
     private car: Car | null = null;
     private debugInfo: {

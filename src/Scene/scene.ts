@@ -11,6 +11,7 @@ import { PhysicsWorld } from "../classes/PhysicsWorld";
 import { ThirdPersonCamera } from "../classes/ThirdPersonCamera";
 import { PhysicsDebugger } from '../classes/PhysicsDebugger';
 import { TrackPhysics } from '../classes/TrackPhysics';
+import { FPSCounter } from '../classes/FPSCounter';
 
 export class Scene {
     private scene: THREE.Scene;
@@ -26,13 +27,25 @@ export class Scene {
     private physicsDebugger!: PhysicsDebugger;
     private track!: THREE.Object3D;
     private trackPhysics!: TrackPhysics;
+    private fixedTimeStep: number = 1/120;
+    private maxFPS: number = 120;
+    private fpsInterval: number;
+    private lastTime: number = 0;
+    private accumulator: number = 0;
+    private previousState: any = null;
+    private currentState: any = null;
+    private isInitialized: boolean = false;
+    private fpsCounter!: FPSCounter;
 
     constructor(config: Partial<SceneConfig> = {}) {
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB); // Couleur bleu ciel
+        this.scene.background = new THREE.Color(0x87CEEB);
         this.config = { ...DEFAULT_SCENE_CONFIG, ...config };
         this.physicsWorld = new PhysicsWorld();
+        this.fpsCounter = new FPSCounter();
+        this.lastTime = performance.now();
+        this.fpsInterval = 1000 / this.maxFPS;
         
         this.initialize();
     }
@@ -74,7 +87,6 @@ export class Scene {
             trackLoader.manager = loadingManager;
             
             trackLoader.load('drift_clash_uluru.glb', (trackGltf) => {
-                console.log('Modèle GLTF chargé:', trackGltf);
                 this.track = trackGltf.scene;
                 
                 // Debug des matériaux
@@ -95,7 +107,6 @@ export class Scene {
                                 }
                             });
                         } else if (child.material instanceof THREE.MeshStandardMaterial) {
-                            console.log(`Material for ${child.name}:`, child.material);
                             // Forcer le chargement des textures
                             if (child.material.map) {
                                 child.material.map.colorSpace = THREE.SRGBColorSpace;
@@ -131,7 +142,7 @@ export class Scene {
                 // Initialize other components
                 this.thirdPersonCamera = new ThirdPersonCamera(this.car);
                 this.environment = new Environment(this.scene, this.thirdPersonCamera, this.config);
-                this.renderer = new Renderer(this.thirdPersonCamera, this.config, () => this.animate());
+                this.renderer = new Renderer(this.thirdPersonCamera, this.config);
                 this.thirdPersonCamera.setRenderer(this.renderer.getRenderer());
                 
                 // Add car to physics world
@@ -143,64 +154,72 @@ export class Scene {
                 
                 // Create GUI
                 this.createGUI();
+
+                // Démarrer les boucles seulement après l'initialisation complète
+                this.isInitialized = true;
+                this.gameLoop();
             });
         });
+    }
+
+    private gameLoop(): void {
+        if (!this.isInitialized) return;
+
+        const currentTime = performance.now();
+        let frameTime = (currentTime - this.lastTime) / 1000;
+        this.lastTime = currentTime;
+
+        frameTime = Math.min(frameTime, 0.25);
+        this.accumulator += frameTime;
+
+        while (this.accumulator >= this.fixedTimeStep) {
+            if (this.car) {
+                this.car.update(this.fixedTimeStep);
+            }
+            this.physicsWorld.update(this.fixedTimeStep);
+            this.accumulator -= this.fixedTimeStep;
+        }
+
+        if (this.thirdPersonCamera) {
+            this.thirdPersonCamera.update();
+        }
+
+        if (this.controls) {
+            this.controls.update();
+        }
+
+        if (this.physicsDebugger && this.physicsDebugger.isEnabled()) {
+            this.physicsDebugger.update();
+        }
+
+        this.fpsCounter.update();
+
+        if (this.renderer) {
+            this.renderer.render(this.scene);
+        }
+
+        requestAnimationFrame(() => this.gameLoop());
     }
 
     private createGUI() {
         this.gui = new GUI({ width: 300 });
         
-        // Contrôles du debugger
         const debugFolder = this.gui.addFolder('Debug');
         debugFolder.add(this.physicsDebugger, 'toggle').name('Toggle Physics Debug');
         
-        // Informations de debug
         const debugInfo = this.physicsDebugger.getDebugInfo();
         const debugInfoFolder = debugFolder.addFolder('Debug Info');
         
-        // Ajouter les informations de debug
         debugInfoFolder.add(debugInfo, 'speed').name('Speed').listen();
         debugInfoFolder.add(debugInfo.position, 'x').name('Position X').listen();
         debugInfoFolder.add(debugInfo.position, 'y').name('Position Y').listen();
         debugInfoFolder.add(debugInfo.position, 'z').name('Position Z').listen();
         debugInfoFolder.add(debugInfo.rotation, 'y').name('Rotation Y').listen();
         
+        debugFolder.add(this.fpsCounter, 'show').name('Show FPS');
+        debugFolder.add(this.fpsCounter, 'hide').name('Hide FPS');
+        
         debugInfoFolder.open();
-    }
-
-    public animate() {
-        const delta = this.clock.getDelta();
-        
-        // Limiter le delta time pour éviter les sauts physiques
-        const fixedDelta = Math.min(delta, 1/60);
-        
-        // Update car
-        if (this.car) {
-            this.car.update(fixedDelta);
-        }
-
-        // Update physics with fixed timestep
-        this.physicsWorld.update(fixedDelta);
-
-        // Update third person camera
-        if (this.thirdPersonCamera) {
-            this.thirdPersonCamera.update();
-        }
-
-        // Update controls
-        if (this.controls) {
-            this.controls.update();
-        }
-
-        // Update debugger only if enabled
-        if (this.physicsDebugger && this.physicsDebugger.isEnabled()) {
-            this.physicsDebugger.update();
-        }
-
-        // Render
-        if (this.renderer) {
-            this.renderer.render(this.scene);
-        }
     }
 
     public updateConfig(newConfig: Partial<SceneConfig>): void {
@@ -218,5 +237,10 @@ export class Scene {
             this.thirdPersonCamera.getCamera().updateProjectionMatrix();
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         }
+    }
+
+    // Méthode pour arrêter proprement les boucles
+    public dispose(): void {
+        this.isInitialized = false;
     }
 }
