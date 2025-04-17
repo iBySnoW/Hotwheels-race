@@ -14,20 +14,15 @@ export interface SceneConfig {
         maxDistance: number;
         rotateSpeed: number;
         zoomSpeed: number;
-    };
-    environment: {
-        groundSize: number;
-        groundColor: number;
-        groundY: number;
-    };
+    }
 }
 
 export const DEFAULT_SCENE_CONFIG: SceneConfig = {
     car: {
-        maxSpeed: 30,        // Vitesse maximale en m/s
-        acceleration: 1,     // Accélération en m/s²
-        deceleration: 0.5,   // Décélération en m/s²
-        rotationSpeed: 0.1,  // Vitesse de rotation en rad/s
+        maxSpeed: 50,        // Augmenté de 30 à 50 m/s (~180 km/h)
+        acceleration: 8,     // Augmenté de 3 à 8 m/s²
+        deceleration: 1,     // Augmenté de 0.5 à 1
+        rotationSpeed: 0.2,  // Doublé de 0.1 à 0.2
         position: {
             x: 0,
             y:5,
@@ -46,10 +41,5 @@ export const DEFAULT_SCENE_CONFIG: SceneConfig = {
         maxDistance: 50,
         rotateSpeed: 1.0,
         zoomSpeed: 1.0
-    },
-    environment: {
-        groundSize: 100,     // Sol plus grand
-        groundColor: 0x808080, // Couleur grise plus réaliste
-        groundY: 0
     }
 }; 

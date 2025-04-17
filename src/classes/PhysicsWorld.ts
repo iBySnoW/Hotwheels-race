@@ -6,9 +6,11 @@ export class PhysicsWorld {
     private world: CANNON.World;
     private groundBody: CANNON.Body;
     private bodies: Map<THREE.Object3D, CANNON.Body> = new Map();
-    private constraints: CANNON.Constraint[] = [];
     private groundMaterial: CANNON.Material;
     private carMaterial: CANNON.Material;
+    private readonly fixedTimeStep: number = 1/60;
+    private readonly maxSubSteps: number = 10;
+    private readonly positionSmoothingFactor: number = 0.8; // Facteur de lissage pour les positions
 
     constructor() {
         // Créer le monde physique avec une gravité réaliste
@@ -23,16 +25,20 @@ export class PhysicsWorld {
         // Configurer les propriétés des matériaux
         this.groundMaterial.friction = 0.8;    // Friction élevée pour le sol
         this.groundMaterial.restitution = 0.1; // Faible restitution pour éviter les rebonds
-        this.carMaterial.friction = 0.5;       // Friction moyenne pour la voiture
-        this.carMaterial.restitution = 0.2;    // Restitution moyenne pour la voiture
+        this.carMaterial.friction = 0.6;       // Augmenté pour une meilleure adhérence
+        this.carMaterial.restitution = 0.3;    // Augmenté pour des collisions plus réalistes
 
         // Créer le contact material entre le sol et la voiture
         const contactMaterial = new CANNON.ContactMaterial(
             this.groundMaterial,
             this.carMaterial,
             {
-                friction: 0.5,
-                restitution: 0.2
+                friction: 0.6,
+                restitution: 0.3,
+                contactEquationStiffness: 1e7,    // Réduit pour des collisions plus douces
+                contactEquationRelaxation: 3,     // Augmenté pour une meilleure stabilité
+                frictionEquationStiffness: 1e7,   // Réduit pour des collisions plus douces
+                frictionEquationRelaxation: 3     // Augmenté pour une meilleure stabilité
             }
         );
         this.world.addContactMaterial(contactMaterial);
@@ -100,23 +106,32 @@ export class PhysicsWorld {
         }
     }
 
-    public update(delta: number): void {
-        // Mettre à jour le monde physique avec un pas de temps fixe
-        this.world.step(1 / 60);
+    public update(deltaTime: number): void {
+        // Utilisation correcte de step avec deltaTime et maxSubSteps
+        this.world.step(this.fixedTimeStep, deltaTime, this.maxSubSteps);
 
-        // Mettre à jour les positions des objets
+        // Mise à jour des positions des objets avec lissage
         this.bodies.forEach((body, object) => {
-            object.position.copy(new THREE.Vector3(
+            // Calculer la nouvelle position
+            const newPosition = new THREE.Vector3(
                 body.position.x,
                 body.position.y,
                 body.position.z
-            ));
-            object.quaternion.copy(new THREE.Quaternion(
+            );
+            
+            // Appliquer un lissage à la position
+            object.position.lerp(newPosition, this.positionSmoothingFactor);
+            
+            // Mise à jour de la rotation avec lissage
+            const newQuaternion = new THREE.Quaternion(
                 body.quaternion.x,
                 body.quaternion.y,
                 body.quaternion.z,
                 body.quaternion.w
-            ));
+            );
+            
+            // Appliquer un lissage à la rotation
+            object.quaternion.slerp(newQuaternion, this.positionSmoothingFactor);
         });
     }
 
@@ -126,5 +141,9 @@ export class PhysicsWorld {
 
     public getWorld(): CANNON.World {
         return this.world;
+    }
+
+    public getBodies(): Map<THREE.Object3D, CANNON.Body> {
+        return this.bodies;
     }
 } 

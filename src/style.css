@@ -91,4 +91,38 @@ canvas {
 .hidden {
     opacity: 0;
     pointer-events: none;
+}
+
+/* Styles pour la barre de progression */
+.progress-container {
+    width: 80%;
+    max-width: 500px;
+    margin: 2rem auto;
+    text-align: center;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #ff3e3e, #ff9e3e);
+    border-radius: 10px;
+    transition: width 0.3s ease-in-out;
+}
+
+.progress-text {
+    margin-top: 0.5rem;
+    color: white;
+    font-family: 'Racing Sans One', sans-serif;
+    font-size: 1.2rem;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
 } 

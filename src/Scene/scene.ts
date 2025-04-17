@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { GUI } from "dat.gui";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 // Classes
@@ -9,51 +8,97 @@ import { Renderer } from "../classes/Renderer";
 import { SceneConfig, DEFAULT_SCENE_CONFIG } from "../interfaces/SceneConfig";
 import { PhysicsWorld } from "../classes/PhysicsWorld";
 import { ThirdPersonCamera } from "../classes/ThirdPersonCamera";
-import { PhysicsDebugger } from '../classes/PhysicsDebugger';
 import { TrackPhysics } from '../classes/TrackPhysics';
 import { FPSCounter } from '../classes/FPSCounter';
+import { Speedometer } from '../classes/Speedometer';
+import { PerformanceMonitor } from '../classes/PerformanceMonitor';
+import { CullingManager } from '../classes/CullingManager';
 
 export class Scene {
     private scene: THREE.Scene;
-    private renderer!: Renderer;
-    private gui!: GUI;
+    private renderer!: Renderer; 
     private thirdPersonCamera!: ThirdPersonCamera;
     private environment!: Environment;
-    private clock: THREE.Clock;
     private car!: Car;
     private config: SceneConfig;
     private physicsWorld: PhysicsWorld;
     private controls!: OrbitControls;
-    private physicsDebugger!: PhysicsDebugger;
     private track!: THREE.Object3D;
     private trackPhysics!: TrackPhysics;
-    private fixedTimeStep: number = 1/120;
-    private maxFPS: number = 120;
-    private fpsInterval: number;
-    private lastTime: number = 0;
-    private accumulator: number = 0;
-    private previousState: any = null;
-    private currentState: any = null;
-    private isInitialized: boolean = false;
     private fpsCounter!: FPSCounter;
+    private speedometer!: Speedometer;
 
-    constructor(config: Partial<SceneConfig> = {}) {
-        this.clock = new THREE.Clock();
+    // Configuration du temps et de la physique
+    private lastTime: number = performance.now();
+    private isInitialized: boolean = false;
+    
+    // Nouveaux paramètres pour la gestion du temps
+    private static readonly TIME_CONFIG = {
+        FIXED_TIMESTEP: 1/60,
+        MAX_DELTA: 1/60,    // Réduit pour éviter les grands sauts de physique
+        MIN_DELTA: 1/120,   // Évite les calculs trop fréquents
+        TIME_SCALE: 1.0     // Permet de ralentir/accélérer le temps
+    };
+    
+    private physicsAccumulator: number = 0;
+    private performanceMonitor: PerformanceMonitor;
+    private cullingManager!: CullingManager;
+
+    // Système de suivi de chargement
+    private loadingManager: THREE.LoadingManager;
+    private onLoadingProgressCallback: ((progress: number) => void) | null = null;
+    private totalAssetsToLoad: number = 0;
+    private loadedAssets: number = 0;
+
+    constructor(config: Partial<SceneConfig> = {}, onLoadingProgress?: (progress: number) => void) {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x87CEEB);
         this.config = { ...DEFAULT_SCENE_CONFIG, ...config };
         this.physicsWorld = new PhysicsWorld();
         this.fpsCounter = new FPSCounter();
-        this.lastTime = performance.now();
-        this.fpsInterval = 1000 / this.maxFPS;
+        this.performanceMonitor = new PerformanceMonitor();
+        
+        // Initialiser le gestionnaire de chargement
+        this.onLoadingProgressCallback = onLoadingProgress || null;
+        this.loadingManager = new THREE.LoadingManager();
+        this.setupLoadingManager();
         
         this.initialize();
     }
 
+    private setupLoadingManager(): void {
+        // Compter le nombre total d'assets à charger
+        this.totalAssetsToLoad = 2; // Voiture et circuit
+        
+        this.loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
+            this.loadedAssets = itemsLoaded;
+            const progress = this.loadedAssets / this.totalAssetsToLoad;
+            
+            if (this.onLoadingProgressCallback) {
+                this.onLoadingProgressCallback(progress);
+            }
+            
+            console.log(`Chargement: ${url} (${itemsLoaded}/${itemsTotal})`);
+        };
+        
+        this.loadingManager.onLoad = () => {
+            console.log('Toutes les ressources sont chargées !');
+            
+            // Signaler que le chargement est terminé
+            if (this.onLoadingProgressCallback) {
+                this.onLoadingProgressCallback(1.0);
+            }
+        };
+        
+        this.loadingManager.onError = (url) => {
+            console.error('Erreur lors du chargement:', url);
+        };
+    }
+
     private initialize(): void {  
         // Load car model first
-        const loader = new GLTFLoader();
-        loader.load('/models/car-002/scene_opti.glb', (gltf) => {
+        const loader = new GLTFLoader(this.loadingManager);
+        loader.load('/models/car/car.glb', (gltf) => {
             // Create car with loaded model
             this.car = new Car(gltf.scene, this.config.car);
             this.scene.add(gltf.scene);
@@ -66,27 +111,15 @@ export class Scene {
                 );
             }
 
-            // Load track model
-            const trackLoader = new GLTFLoader();
-            const loadingManager = new THREE.LoadingManager();
-            
-            // Debug du chargement des textures
-            loadingManager.onLoad = () => {
-                console.log('Toutes les ressources sont chargées !');
-            };
-            
-            loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
-                console.log(`Chargement: ${url} (${itemsLoaded}/${itemsTotal})`);
-            };
-            
-            loadingManager.onError = (url) => {
-                console.error('Erreur lors du chargement:', url);
-            };
+            // Initialize speedometer
+            this.speedometer = new Speedometer(this.car);
 
-            trackLoader.setPath('/models/cartoon_race_track_-_oval/');
-            trackLoader.manager = loadingManager;
+            // Load track model
+            const trackLoader = new GLTFLoader(this.loadingManager);
             
-            trackLoader.load('drift_clash_uluru.glb', (trackGltf) => {
+            trackLoader.setPath('/models/race/');
+            
+            trackLoader.load('race.glb', (trackGltf) => {
                 this.track = trackGltf.scene;
                 
                 // Debug des matériaux
@@ -148,38 +181,104 @@ export class Scene {
                 // Add car to physics world
                 this.physicsWorld.addCar(this.car);
 
-                // Create physics debugger
-                this.physicsDebugger = new PhysicsDebugger(this.scene, this.physicsWorld);
-                this.physicsDebugger.setCar(this.car);
-                
-                // Create GUI
-                this.createGUI();
-
+                // Initialiser les gestionnaires d'optimisation
+                this.initializeOptimizationManagers();
+              
                 // Démarrer les boucles seulement après l'initialisation complète
                 this.isInitialized = true;
                 this.gameLoop();
             });
         });
     }
+    
+    /**
+     * Initialise les gestionnaires d'optimisation
+     */
+    private initializeOptimizationManagers(): void {
+        this.cullingManager = new CullingManager(this.scene, this.thirdPersonCamera.getCamera(), {
+            enabled: true,
+            maxDistance: 1000
+        });
+        
+        this.applyOptimizationsToScene();
+    }
+    
+    /**
+     * Applique les optimisations aux objets de la scène
+     */
+    private applyOptimizationsToScene(): void {
+        console.log("Application des optimisations à la scène...");
+        
+        // Appliquer le culling à tous les objets de la scène
+        this.track.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                this.cullingManager.registerObject(child);
+            }
+        });
+        
+        // Appliquer le culling à la voiture
+        const carModel = this.car.getModel();
+        if (carModel) {
+            this.cullingManager.registerObject(carModel);
+        }
+        
+        console.log("Optimisations appliquées avec succès");
+    }
 
     private gameLoop(): void {
         if (!this.isInitialized) return;
 
+        // Calcul du delta time en secondes avec limites
         const currentTime = performance.now();
-        let frameTime = (currentTime - this.lastTime) / 1000;
+        let deltaTime = (currentTime - this.lastTime) / 1000;
+        
+        // Limiter le delta time
+        deltaTime = Math.max(Math.min(deltaTime, Scene.TIME_CONFIG.MAX_DELTA), Scene.TIME_CONFIG.MIN_DELTA);
+        deltaTime *= Scene.TIME_CONFIG.TIME_SCALE;
+        
         this.lastTime = currentTime;
-
-        frameTime = Math.min(frameTime, 0.25);
-        this.accumulator += frameTime;
-
-        while (this.accumulator >= this.fixedTimeStep) {
-            if (this.car) {
-                this.car.update(this.fixedTimeStep);
-            }
-            this.physicsWorld.update(this.fixedTimeStep);
-            this.accumulator -= this.fixedTimeStep;
+        
+        // Accumulation du temps pour la physique
+        this.physicsAccumulator += deltaTime;
+        
+        // Mise à jour de la physique avec un pas fixe
+        const physicsStartTime = performance.now();
+        while (this.physicsAccumulator >= Scene.TIME_CONFIG.FIXED_TIMESTEP) {
+            this.updatePhysics(Scene.TIME_CONFIG.FIXED_TIMESTEP);
+            this.physicsAccumulator -= Scene.TIME_CONFIG.FIXED_TIMESTEP;
         }
-
+        const physicsTime = performance.now() - physicsStartTime;
+        
+        // Mise à jour du rendu avec interpolation
+        const alpha = this.physicsAccumulator / Scene.TIME_CONFIG.FIXED_TIMESTEP;
+        this.updateRender(deltaTime, alpha);
+        
+        // Mise à jour des gestionnaires d'optimisation
+        this.updateOptimizationManagers();
+        
+        // Mise à jour du moniteur de performance
+        this.performanceMonitor.update(deltaTime, physicsTime);
+        
+        requestAnimationFrame(() => this.gameLoop());
+    }
+    
+    /**
+     * Met à jour les gestionnaires d'optimisation
+     */
+    private updateOptimizationManagers(): void {
+        this.cullingManager.update();
+    }
+    
+    private updatePhysics(deltaTime: number): void {
+        // Mise à jour de la physique
+        if (this.car) {
+            this.car.update(deltaTime);
+        }
+        this.physicsWorld.update(deltaTime);
+    }
+    
+    private updateRender(deltaTime: number, alpha: number): void {
+        // Mise à jour des composants visuels
         if (this.thirdPersonCamera) {
             this.thirdPersonCamera.update();
         }
@@ -188,38 +287,16 @@ export class Scene {
             this.controls.update();
         }
 
-        if (this.physicsDebugger && this.physicsDebugger.isEnabled()) {
-            this.physicsDebugger.update();
+        if (this.speedometer) {
+            this.speedometer.update();
         }
 
         this.fpsCounter.update();
 
+        // Rendu de la scène
         if (this.renderer) {
             this.renderer.render(this.scene);
         }
-
-        requestAnimationFrame(() => this.gameLoop());
-    }
-
-    private createGUI() {
-        this.gui = new GUI({ width: 300 });
-        
-        const debugFolder = this.gui.addFolder('Debug');
-        debugFolder.add(this.physicsDebugger, 'toggle').name('Toggle Physics Debug');
-        
-        const debugInfo = this.physicsDebugger.getDebugInfo();
-        const debugInfoFolder = debugFolder.addFolder('Debug Info');
-        
-        debugInfoFolder.add(debugInfo, 'speed').name('Speed').listen();
-        debugInfoFolder.add(debugInfo.position, 'x').name('Position X').listen();
-        debugInfoFolder.add(debugInfo.position, 'y').name('Position Y').listen();
-        debugInfoFolder.add(debugInfo.position, 'z').name('Position Z').listen();
-        debugInfoFolder.add(debugInfo.rotation, 'y').name('Rotation Y').listen();
-        
-        debugFolder.add(this.fpsCounter, 'show').name('Show FPS');
-        debugFolder.add(this.fpsCounter, 'hide').name('Hide FPS');
-        
-        debugInfoFolder.open();
     }
 
     public updateConfig(newConfig: Partial<SceneConfig>): void {
@@ -239,8 +316,10 @@ export class Scene {
         }
     }
 
-    // Méthode pour arrêter proprement les boucles
     public dispose(): void {
         this.isInitialized = false;
+        if (this.speedometer) {
+            this.speedometer.dispose();
+        }
     }
 }

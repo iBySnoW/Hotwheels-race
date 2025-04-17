@@ -5,13 +5,15 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 export class ThirdPersonCamera {
     private camera: THREE.PerspectiveCamera;
     private target: Car;
-    private smoothness: number = 0.1;
+    private smoothness: number = 0.05;
     private offset: THREE.Vector3;
     private currentPosition: THREE.Vector3;
     private desiredPosition: THREE.Vector3;
     private orbitControls: OrbitControls | null = null;
     private isOrbitMode: boolean = false;
     private renderer: THREE.WebGLRenderer | null = null;
+    private lastLookAtPoint: THREE.Vector3 = new THREE.Vector3();
+    private lookAtSmoothness: number = 0.1;
 
     // Ajout de paramètres pour le comportement dynamique
     private  BASE_HEIGHT = 2.0;        // Hauteur de base
@@ -79,7 +81,12 @@ export class ThirdPersonCamera {
         // Faire regarder la caméra vers la voiture avec un point légèrement surélevé
         const lookAtPoint = targetPosition.clone();
         lookAtPoint.y += 0.5;
-        this.camera.lookAt(lookAtPoint);
+        
+        // Appliquer un lissage au point de regard
+        this.lastLookAtPoint.lerp(lookAtPoint, this.lookAtSmoothness);
+        
+        // Utiliser le point de regard lissé
+        this.camera.lookAt(this.lastLookAtPoint);
     }
 
     private calculateDesiredPosition(targetPosition: THREE.Vector3, targetRotation: THREE.Vector3): void {

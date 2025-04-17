@@ -26,41 +26,77 @@ export class Car {
         radius: 0.4,
         directionLocal: new CANNON.Vec3(0, -1, 0),
         axleLocal: new CANNON.Vec3(-1, 0, 0),
-        suspensionStiffness: 30,
-        suspensionRestLength: 0.3,
-        frictionSlip: 1.5,
-        dampingRelaxation: 2.3,
-        dampingCompression: 4.4,
-        maxSuspensionForce: 100000,
-        rollInfluence: 0.08,
-        maxSuspensionTravel: 0.3,
-        customSlidingRotationalSpeed: -30,
+        suspensionStiffness: 45,        // Augmenté pour une meilleure réponse
+        suspensionRestLength: 0.4,      // Augmenté pour plus de débattement
+        frictionSlip: 2.2,              // Augmenté pour une meilleure adhérence
+        dampingRelaxation: 3.0,         // Augmenté pour une meilleure réponse
+        dampingCompression: 4.8,        // Augmenté pour plus de contrôle
+        maxSuspensionForce: 150000,     // Augmenté pour une meilleure tenue de route
+        rollInfluence: 0.04,            // Réduit pour moins de roulis
+        maxSuspensionTravel: 0.4,       // Augmenté pour plus de débattement
+        customSlidingRotationalSpeed: -35,
         useCustomSlidingRotationalSpeed: true,
     };
 
     // Configuration du drift
     private static readonly DRIFT_CONFIG = {
-        FRICTION_REDUCTION: 0.4,    // Réduction de friction pendant le drift
-        ANGLE_FACTOR: 0.8,         // Facteur d'angle de drift
-        FACTOR_INCREASE: 0.1,      // Vitesse d'augmentation du drift
-        FACTOR_DECREASE: 0.95,     // Vitesse de diminution du drift
-        MAX_FACTOR: 1.0,          // Facteur de drift maximum
-        COUNTER_STEER_RATIO: 0.3,  // Ratio de contre-braquage automatique (0.3 = 30%)
-        PLAYER_STEER_RATIO: 0.7    // Ratio de contrôle joueur (0.7 = 70%)
+        REAR_BRAKE_FORCE: 20,           // Réduit pour un drift moins agressif
+        REAR_FRICTION_HANDBRAKE: 0.3,   // Augmenté pour un meilleur contrôle
+        REAR_FRICTION_NORMAL: 2,        // Inchangé
+        FRONT_FRICTION: 2.4,            // Inchangé
+        DRIFT_ANGLE_THRESHOLD: 0.3,     // Augmenté pour éviter les drifts accidentels
+        DRIFT_RECOVERY_RATE: 0.25,      // Réduit pour une transition plus douce
+        DRIFT_INITIATION_SPEED: 40,     // Inchangé
+        DRIFT_STEERING_MULTIPLIER: 1.1, // Réduit pour éviter les 180° trop faciles
+        DRIFT_MOMENTUM_FACTOR: 0.9,     // Augmenté pour conserver plus d'élan
+        DRIFT_STABILITY_FACTOR: 0.7,    // Augmenté pour une meilleure stabilité
+        DRIFT_EXIT_THRESHOLD: 0.15,     // Inchangé
+        DRIFT_TRANSITION_TIME: 0.3,     // Inchangé
+    };
+
+    // Configuration de la dynamique du véhicule
+    private static readonly VEHICLE_DYNAMICS = {
+        // Vitesse et accélération
+        MIN_SPEED_FACTOR: 0.2,         // Facteur de vitesse minimum
+        MAX_SPEED_KMH: 180,           // Vitesse maximale réduite pour plus de stabilité
+        MIN_STEERING_FACTOR: 0.3,      // Facteur de direction minimum
+        MAX_STEERING_SPEED_KMH: 200,   // Vitesse maximale de direction
+        STEERING_POWER_FACTOR: 1.4,    // Facteur de puissance de direction
+        
+        // Résistances et forces
+        TURN_RESISTANCE_FACTOR: 0.015,  // Résistance en virage
+        MIN_SPEED_FOR_LATERAL_RESISTANCE: 10,
+        LATERAL_RESISTANCE_FACTOR: 0.02,
+        BASE_LINEAR_DAMPING: 0.1,      // Amortissement linéaire de base
+        BASE_ANGULAR_DAMPING: 0.5,     // Amortissement angulaire de base
+        
+        // Conversion
+        KMH_TO_MS: 1/3.6,              // Convertir km/h en m/s
+        DOWNFORCE_FACTOR: 0.001,        // Force vers le bas proportionnelle à la vitesse
+        AIR_RESISTANCE_FACTOR: 0.0001   // Résistance de l'air
+    };
+
+    // Configuration aérodynamique avancée
+    private static readonly AERODYNAMICS_CONFIG = {
+        DOWNFORCE_FACTOR: 0.004,        // Doublé de 0.002 à 0.004 pour plus de downforce
+        AIR_RESISTANCE_FACTOR: 0.00015, // Inchangé
+        GROUND_EFFECT_FACTOR: 0.002,    // Doublé de 0.001 à 0.002 pour plus d'effet de sol
+        LIFT_FACTOR: 0.00005,          // Réduit de 0.0001 à 0.00005 pour moins de portance
+        TURBULENCE_FACTOR: 0.00005,     // Inchangé
+        WIND_RESISTANCE: 0.0001,        // Inchangé
+        SPEED_THRESHOLD: 30,           // Inchangé
     };
 
     // États du véhicule
-    private isDrifting: boolean = false;
-    private driftFactor: number = 0;
     private isDriftDetected: boolean = false;
 
     // Constantes de physique
     private static readonly PHYSICS_CONFIG = {
-        MAX_FORCE: 4500,           // Force moteur maximale
-        MAX_STEER: 0.8,           // Angle de braquage maximum
-        BRAKE_FORCE: 50,          // Force de freinage de base
-        REVERSE_POWER_RATIO: 0.7,  // Ratio de puissance en marche arrière (70%)
-        ENGINE_BRAKE_FACTOR: 3     // Facteur de frein moteur
+        MAX_FORCE: 3000,            // Force maximale raisonnable
+        MAX_STEER: 0.5,            // Angle de braquage maximum
+        BRAKE_FORCE: 70,           // Force de freinage
+        REVERSE_POWER_RATIO: 0.7,   // Ratio de puissance en marche arrière
+        ENGINE_BRAKE_FACTOR: 3      // Facteur de frein moteur
     };
 
     constructor(model: THREE.Group, config: Partial<CarConfig> = {}) {
@@ -147,51 +183,29 @@ export class Car {
         
         // Créer le matériau du châssis
         const chassisMaterial = new CANNON.Material('chassis');
+        chassisMaterial.friction = 0.7;
+        chassisMaterial.restitution = 0.3;
         
         // Créer le corps du châssis physique
         this.body = new CANNON.Body({ 
-            mass: 800,
+            mass: 800, // Réduit pour une meilleure maniabilité
             material: chassisMaterial,
-            angularDamping: 0.5,
-            linearDamping: 0.1
+            angularDamping: 0.3, // Réduit pour permettre plus de rotation en cas de collision
+            linearDamping: 0.05, // Réduit pour une meilleure réponse aux collisions
+            allowSleep: false
         });
 
-        // Parcourir le modèle pour trouver le châssis
-        model.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.geometry) {
-                const mesh = child;
-                const geometry = mesh.geometry;
-                
-                if (geometry.attributes.position) {
-                    // Obtenir les vertices et indices de la géométrie
-                    const vertices = geometry.attributes.position.array;
-                    const indices = geometry.index ? geometry.index.array : null;
+        // Ajouter une forme de boîte pour le châssis principal
+        const chassisShape = new CANNON.Box(new CANNON.Vec3(0.68, 0.35, 1.55));
+        this.body.addShape(chassisShape, new CANNON.Vec3(0, 0.2, 0));
 
-                    // Créer un shape trimesh pour la géométrie
-                    const shape = new CANNON.Trimesh(
-                        Array.from(vertices as Float32Array),
-                        indices ? Array.from(indices) : []
-                    );
+        // Ajouter une forme de boîte plus petite pour le toit
+        const roofShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.2, 0.8));
+        this.body.addShape(roofShape, new CANNON.Vec3(0, 0.6, 0));
 
-                    // Calculer la transformation complète du mesh
-                    mesh.updateMatrixWorld(true);
-                    const worldMatrix = mesh.matrixWorld.clone();
-
-                    // Décomposer la matrice en position, rotation et échelle
-                    const meshPosition = new THREE.Vector3();
-                    const quaternion = new THREE.Quaternion();
-                    const scale = new THREE.Vector3();
-                    worldMatrix.decompose(meshPosition, quaternion, scale);
-
-                    // Appliquer la position et rotation au corps
-                    this.body!.position.copy(meshPosition as any);
-                    this.body!.quaternion.copy(quaternion as any);
-
-                    // Ajouter le shape au corps
-                    this.body!.addShape(shape);
-                }
-            }
-        });
+        // Positionner le corps
+        this.body.position.set(position.x, position.y, position.z);
+        this.body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), 0);
 
         // Positionner le modèle
         model.position.copy(this.body.position as any);
@@ -219,7 +233,6 @@ export class Car {
             return { x: pos.x, y: 0, z: pos.z }; 
         });
 
-      
         // Ajouter chaque roue
         wheelPositions.forEach((pos, i) => this.addWheel(pos, i, wheelMeshes[i].mesh, model));
     }
@@ -300,124 +313,99 @@ export class Car {
     public update(delta: number): void {
         if (!this.vehicle || !this.body) return;
         
-        this.updateVehicleControls();
+        // Limiter le delta pour éviter les grands sauts de physique
+        const limitedDelta = Math.min(delta, 1/30);
+        
+        this.updateVehicleControls(limitedDelta);
+        this.applyAdvancedAerodynamics(limitedDelta);
         this.updateWheels();
         this.updateModel();
+        this.updateDriftState();
     }
 
-    private updateVehicleControls(): void {
+    private updateVehicleControls(delta: number): void {
         if (!this.vehicle) return;
 
-        const maxSteerVal = 0.8;
-        const maxForce = 3000;
-        const brakeForce = 50;
+        const maxSteerVal = Car.PHYSICS_CONFIG.MAX_STEER;
+        const maxForce = Car.PHYSICS_CONFIG.MAX_FORCE;
+        const brakeForce = Car.PHYSICS_CONFIG.BRAKE_FORCE;
 
-        // Ajustement de la direction en fonction du drift
-        const steeringFactor = this.isDrifting ? 1.2 : 1.0;  // Plus de réactivité pendant le drift
-        const speed = this.getSpeed();
-        const speedFactor = Math.max(0.4, 1 - speed / 50);
-        const currentMaxSteer = maxSteerVal * speedFactor * steeringFactor;
-
-        this.handleAcceleration(maxForce);
-        this.handleBraking(brakeForce);
-        this.handleSteering(currentMaxSteer);
+        this.handleAcceleration(maxForce, delta);
+        this.handleBraking(brakeForce, delta);
+        this.handleSteering(maxSteerVal);
     }
 
-    private handleAcceleration(maxForce: number): void {
+    private handleAcceleration(maxForce: number, delta: number): void {
         if (!this.vehicle) return;
-
-        // Augmenter la force maximale pour plus de puissance
-        maxForce = 4500;  // Augmentation significative de la puissance (était 1500)
 
         // Calculer la force en fonction de la vitesse et du drift
         const speed = this.getSpeed();
-        const speedFactor = Math.max(0.6, 1 - speed / 80);  // Réduction moins importante de la puissance à haute vitesse
+        const speedFactor = Math.max(
+            Car.VEHICLE_DYNAMICS.MIN_SPEED_FACTOR, 
+            1 - speed / Car.VEHICLE_DYNAMICS.MAX_SPEED_KMH
+        );
+        
+        // Ne pas multiplier la force de base par delta, seulement les variations
         const engineForce = maxForce * speedFactor;
 
         if (this.controls.isKeyPressed('s')) {
-            // Propulsion arrière pure avec puissance réduite en marche arrière
-            const reverseForce = engineForce * 0.7;  // 70% de la puissance en marche arrière
-            this.vehicle.applyEngineForce(-reverseForce, 2);
-            this.vehicle.applyEngineForce(-reverseForce, 3);
-            // Aucune force sur les roues avant
-            this.vehicle.applyEngineForce(0, 0);
-            this.vehicle.applyEngineForce(0, 1);
+            const reverseForce = engineForce * Car.PHYSICS_CONFIG.REVERSE_POWER_RATIO;
+            // Distribution plus équilibrée des forces en marche arrière
+            this.vehicle.applyEngineForce(-reverseForce * 0.7, 2);
+            this.vehicle.applyEngineForce(-reverseForce * 0.7, 3);
+            this.vehicle.applyEngineForce(-reverseForce * 0.3, 0);
+            this.vehicle.applyEngineForce(-reverseForce * 0.3, 1);
         } else if (this.controls.isKeyPressed('z')) {
-            // Propulsion arrière pure avec pleine puissance
-            this.vehicle.applyEngineForce(engineForce, 2);
-            this.vehicle.applyEngineForce(engineForce, 3);
-            // Aucune force sur les roues avant
-            this.vehicle.applyEngineForce(0, 0);
-            this.vehicle.applyEngineForce(0, 1);
+            // Distribution plus équilibrée des forces en marche avant
+            this.vehicle.applyEngineForce(engineForce * 0.7, 2);
+            this.vehicle.applyEngineForce(engineForce * 0.7, 3);
+            this.vehicle.applyEngineForce(engineForce * 0.3, 0);
+            this.vehicle.applyEngineForce(engineForce * 0.3, 1);
         } else {
-            // Frein moteur progressif uniquement sur les roues arrière
-            const engineBrakeForce = Math.min(this.getSpeed() * 3, maxForce * 0.3);  // Frein moteur plus fort
-            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z), 2);
-            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z), 3);
-            this.vehicle.applyEngineForce(0, 0);
-            this.vehicle.applyEngineForce(0, 1);
+            // Pour le frein moteur, nous gardons le delta car c'est une force qui s'accumule
+            const engineBrakeForce = Math.min(this.getSpeed() * Car.PHYSICS_CONFIG.ENGINE_BRAKE_FACTOR, maxForce * 0.3);
+            // Distribution plus équilibrée du frein moteur
+            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z) * 0.7, 2);
+            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z) * 0.7, 3);
+            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z) * 0.3, 0);
+            this.vehicle.applyEngineForce(-engineBrakeForce * Math.sign(this.body!.velocity.z) * 0.3, 1);
         }
     }
 
-    private handleBraking(brakeForce: number): void {
+    private handleBraking(brakeForce: number, delta: number): void {
         if (!this.vehicle) return;
 
         if (this.controls.isKeyPressed('space')) {
-            // Déclencher le drift
-            this.isDrifting = true;
+            // Application du frein à main
+            // Fort freinage sur les roues arrière
+            this.vehicle.setBrake(brakeForce * Car.DRIFT_CONFIG.REAR_BRAKE_FORCE, 2);
+            this.vehicle.setBrake(brakeForce * Car.DRIFT_CONFIG.REAR_BRAKE_FORCE, 3);
             
-            // Augmenter progressivement le facteur de drift
-            if (this.driftFactor < Car.DRIFT_CONFIG.MAX_FACTOR) {
-                this.driftFactor += Car.DRIFT_CONFIG.FACTOR_INCREASE;
-            }
+            // Réduire la friction des roues arrière pendant le frein à main
+            this.vehicle.wheelInfos[2].frictionSlip = Car.DRIFT_CONFIG.REAR_FRICTION_HANDBRAKE;
+            this.vehicle.wheelInfos[3].frictionSlip = Car.DRIFT_CONFIG.REAR_FRICTION_HANDBRAKE;
 
-            // Réduire la friction des roues arrière pendant le drift
-            const rearWheelFriction = Car.DRIFT_CONFIG.FRICTION_REDUCTION;
-            this.vehicle.wheelInfos[2].frictionSlip = rearWheelFriction;
-            this.vehicle.wheelInfos[3].frictionSlip = rearWheelFriction;
+            // Pas de freinage sur les roues avant pour garder le contrôle
+            this.vehicle.setBrake(0, 0);
+            this.vehicle.setBrake(0, 1);
 
-            // Appliquer un freinage plus fort sur les roues arrière pour le frein à main
-            this.vehicle.setBrake(brakeForce * 5, 2);  // Force de freinage x5 sur roue arrière gauche
-            this.vehicle.setBrake(brakeForce * 5, 3);  // Force de freinage x5 sur roue arrière droite
-            // Freinage léger sur les roues avant pour permettre le contrôle
-            this.vehicle.setBrake(brakeForce * 0.2, 0);
-            this.vehicle.setBrake(brakeForce * 0.2, 1);
-
-            // Annuler toute force moteur pendant le freinage
+            // Annuler la force moteur pendant le freinage
             this.vehicle.applyEngineForce(0, 2);
             this.vehicle.applyEngineForce(0, 3);
-
-            // Appliquer une force centrifuge simulée
-            if (this.body) {
-                const speed = this.getSpeed();
-                const steeringAngle = this.vehicle.wheelInfos[0].steering;
-                const centrifugalForce = speed * speed * Math.abs(steeringAngle) * 0.1;
-                const direction = new CANNON.Vec3(
-                    Math.sin(this.body.quaternion.z),
-                    0,
-                    Math.cos(this.body.quaternion.z)
-                );
-                this.body.applyLocalForce(
-                    new CANNON.Vec3(direction.x * centrifugalForce, 0, direction.z * centrifugalForce),
-                    new CANNON.Vec3(0, 0, 0)
-                );
-            }
         } else {
-            // Réduire progressivement le facteur de drift
-            this.driftFactor *= Car.DRIFT_CONFIG.FACTOR_DECREASE;
-            this.isDrifting = false;
-
             // Rétablir la friction normale des roues
-            const normalFriction = 1.5;
-            this.vehicle.wheelInfos[2].frictionSlip = normalFriction;
-            this.vehicle.wheelInfos[3].frictionSlip = normalFriction;
+            this.vehicle.wheelInfos[0].frictionSlip = Car.DRIFT_CONFIG.FRONT_FRICTION;
+            this.vehicle.wheelInfos[1].frictionSlip = Car.DRIFT_CONFIG.FRONT_FRICTION;
+            this.vehicle.wheelInfos[2].frictionSlip = Car.DRIFT_CONFIG.REAR_FRICTION_NORMAL;
+            this.vehicle.wheelInfos[3].frictionSlip = Car.DRIFT_CONFIG.REAR_FRICTION_NORMAL;
 
+            // Relâcher tous les freins
             for (let i = 0; i < 4; i++) {
                 this.vehicle.setBrake(0, i);
             }
         }
 
-        // Détection du drift
+        // Détection du drift basée sur l'impulsion latérale des roues arrière
         if (this.vehicle.wheelInfos.length >= 4) {
             const leftRear = this.vehicle.wheelInfos[2];
             const rightRear = this.vehicle.wheelInfos[3];
@@ -428,16 +416,16 @@ export class Car {
     private handleSteering(maxSteer: number): void {
         if (!this.vehicle) return;
 
-        // Augmenter l'angle de braquage maximum
-        maxSteer = 0.8;
-
-        // Ajouter un facteur de vitesse pour le braquage
+        // Ajuster le facteur de vitesse pour le braquage de manière plus progressive
         const speed = this.getSpeed();
-        const speedFactor = Math.max(0.4, 1 - speed / 50);
-        
-        // Augmenter l'angle de braquage pendant le drift
-        const driftMultiplier = this.isDrifting ? 1.5 : 1.0;
-        const currentMaxSteer = maxSteer * speedFactor * driftMultiplier;
+        const speedFactor = Math.max(
+            Car.VEHICLE_DYNAMICS.MIN_STEERING_FACTOR,
+            Math.pow(
+                1 - (speed / Car.VEHICLE_DYNAMICS.MAX_STEERING_SPEED_KMH),
+                Car.VEHICLE_DYNAMICS.STEERING_POWER_FACTOR
+            )
+        );
+        const currentMaxSteer = maxSteer * speedFactor;
 
         let targetSteering = 0;
         if (this.controls.isKeyPressed('q')) {
@@ -446,21 +434,22 @@ export class Car {
             targetSteering = -currentMaxSteer;
         }
 
-        // Appliquer le contre-braquage automatique pendant le drift
-        if (this.isDrifting && this.body) {
-            // Calculer l'angle de dérapage
-            const velocity = new THREE.Vector3(this.body.velocity.x, 0, this.body.velocity.z);
-            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.body.quaternion as any);
-            const driftAngle = Math.atan2(
-                velocity.cross(forward).y,
-                velocity.dot(forward)
-            );
-
-            // Calculer le contre-braquage en fonction de l'angle de dérapage
-            const counterSteer = -driftAngle * Car.DRIFT_CONFIG.ANGLE_FACTOR;
+        // Modifier la physique du véhicule pour des virages plus réalistes
+        if (this.body) {
+            // Augmenter la résistance au roulement en virage
+            const turnResistance = Math.abs(targetSteering) * speed * 
+                Car.VEHICLE_DYNAMICS.TURN_RESISTANCE_FACTOR;
+            this.body.angularDamping = Car.VEHICLE_DYNAMICS.BASE_ANGULAR_DAMPING + turnResistance;
             
-            // Mélanger le braquage du joueur avec le contre-braquage automatique
-            targetSteering = targetSteering * Car.DRIFT_CONFIG.PLAYER_STEER_RATIO + counterSteer * Car.DRIFT_CONFIG.COUNTER_STEER_RATIO;
+            // Ajouter une légère résistance latérale
+            if (speed > Car.VEHICLE_DYNAMICS.MIN_SPEED_FOR_LATERAL_RESISTANCE) {
+                const lateralVelocity = new CANNON.Vec3();
+                this.body.vectorToLocalFrame(this.body.velocity, lateralVelocity);
+                const lateralResistance = Math.abs(lateralVelocity.x) * 
+                    Car.VEHICLE_DYNAMICS.LATERAL_RESISTANCE_FACTOR;
+                this.body.linearDamping = Car.VEHICLE_DYNAMICS.BASE_LINEAR_DAMPING + 
+                    lateralResistance;
+            }
         }
 
         this.setSteeringAngle(targetSteering);
@@ -474,15 +463,6 @@ export class Car {
         this.vehicle.setSteeringValue(angle, 1);
         this.vehicle.setSteeringValue(0, 2);
         this.vehicle.setSteeringValue(0, 3);
-    }
-
-    private returnSteeringToCenter(): void {
-        if (!this.vehicle) return;
-
-        const currentSteer = this.vehicle.wheelInfos[0].steering;
-        // Augmenter la vitesse de retour du volant
-        const steerReduction = Math.sign(currentSteer) * Math.min(Math.abs(currentSteer), 0.25);
-        this.setSteeringAngle(currentSteer - steerReduction);
     }
 
     private updateWheels(): void {
@@ -525,8 +505,22 @@ export class Car {
 
     private updateModel(): void {
         if (this.model && this.body) {
-            this.model.position.copy(this.body.position as any);
-            this.model.quaternion.copy(this.body.quaternion as any);
+            // Appliquer un lissage à la position
+            const targetPosition = new THREE.Vector3(
+                this.body.position.x,
+                this.body.position.y,
+                this.body.position.z
+            );
+            this.model.position.lerp(targetPosition, 0.8);
+            
+            // Appliquer un lissage à la rotation
+            const targetQuaternion = new THREE.Quaternion(
+                this.body.quaternion.x,
+                this.body.quaternion.y,
+                this.body.quaternion.z,
+                this.body.quaternion.w
+            );
+            this.model.quaternion.slerp(targetQuaternion, 0.8);
         }
     }
 
@@ -630,7 +624,156 @@ export class Car {
         return wheelGroups;
     }
 
-    private updateAnimations(): void {
-        // Cette méthode sera implémentée plus tard quand nous ajouterons les animations
+    private applyAdvancedAerodynamics(delta: number): void {
+        if (!this.body || !this.vehicle) return;
+        
+        const speed = this.getSpeed();
+        if (speed < Car.AERODYNAMICS_CONFIG.SPEED_THRESHOLD) return;
+
+        const speedSquared = speed * speed;
+        const velocity = this.body.velocity;
+        const forward = new CANNON.Vec3(0, 0, 1);
+        this.body.vectorToWorldFrame(forward, forward);
+
+        // Downforce
+        const downforce = speedSquared * Car.AERODYNAMICS_CONFIG.DOWNFORCE_FACTOR;
+        this.body.applyLocalForce(
+            new CANNON.Vec3(0, -downforce, 0),
+            new CANNON.Vec3(0, 0, 0)
+        );
+
+        // Ground effect (plus la voiture est proche du sol, plus la downforce est importante)
+        const groundEffect = Math.max(0, 1 - this.body.position.y) * 
+            speedSquared * Car.AERODYNAMICS_CONFIG.GROUND_EFFECT_FACTOR;
+        this.body.applyLocalForce(
+            new CANNON.Vec3(0, -groundEffect, 0),
+            new CANNON.Vec3(0, 0, 0)
+        );
+
+        // Air resistance
+        const airResistance = speedSquared * Car.AERODYNAMICS_CONFIG.AIR_RESISTANCE_FACTOR;
+        const resistanceForce = new CANNON.Vec3(
+            -velocity.x * airResistance,
+            -velocity.y * airResistance,
+            -velocity.z * airResistance
+        );
+        this.body.applyForce(resistanceForce, this.body.position);
+
+        // Lift force (légère force de portance)
+        const lift = speedSquared * Car.AERODYNAMICS_CONFIG.LIFT_FACTOR;
+        this.body.applyLocalForce(
+            new CANNON.Vec3(0, lift, 0),
+            new CANNON.Vec3(0, 0, 0)
+        );
+
+        // Turbulence (effet aléatoire pour plus de réalisme)
+        const turbulence = (Math.random() - 0.5) * 
+            speedSquared * Car.AERODYNAMICS_CONFIG.TURBULENCE_FACTOR;
+        this.body.applyLocalForce(
+            new CANNON.Vec3(turbulence, 0, turbulence),
+            new CANNON.Vec3(0, 0, 0)
+        );
+
+        // Wind resistance (résistance au vent latéral)
+        const windResistance = speedSquared * Car.AERODYNAMICS_CONFIG.WIND_RESISTANCE;
+        this.body.applyLocalForce(
+            new CANNON.Vec3(-velocity.x * windResistance, 0, 0),
+            new CANNON.Vec3(0, 0, 0)
+        );
+    }
+
+    private updateDriftState(): void {
+        if (!this.body || !this.vehicle) return;
+
+        const speed = this.getSpeed();
+        const angularVelocity = this.body.angularVelocity.y;
+        const lateralVelocity = Math.abs(this.body.velocity.x);
+        const forwardVelocity = Math.abs(this.body.velocity.z);
+
+        // Détection du drift basée sur plusieurs facteurs
+        const isDrifting = 
+            speed > Car.DRIFT_CONFIG.DRIFT_INITIATION_SPEED && 
+            Math.abs(angularVelocity) > Car.DRIFT_CONFIG.DRIFT_ANGLE_THRESHOLD &&
+            lateralVelocity > 5 &&
+            this.controls.isKeyPressed('space');
+
+        // Transition progressive entre l'état normal et le drift
+        if (isDrifting && !this.isDriftDetected) {
+            this.isDriftDetected = true;
+            this.applyDriftPhysics();
+        } else if (!isDrifting && this.isDriftDetected) {
+            this.isDriftDetected = false;
+            this.restoreNormalPhysics();
+        }
+
+        // Ajustement continu des paramètres pendant le drift
+        if (this.isDriftDetected) {
+            this.updateDriftPhysics(speed, angularVelocity, lateralVelocity);
+        }
+    }
+
+    private applyDriftPhysics(): void {
+        if (!this.vehicle) return;
+
+        // Appliquer les paramètres de drift
+        this.wheelBodies.forEach((wheel: CANNON.Body, index: number) => {
+            if (index >= 2 && wheel.material) { // Roues arrière
+                wheel.material.friction = Car.DRIFT_CONFIG.REAR_FRICTION_HANDBRAKE;
+            }
+        });
+
+        // Augmenter le couple moteur pendant le drift
+        if (this.body) {
+            this.body.angularDamping *= Car.DRIFT_CONFIG.DRIFT_STABILITY_FACTOR;
+        }
+    }
+
+    private restoreNormalPhysics(): void {
+        if (!this.vehicle) return;
+
+        // Restaurer les paramètres normaux
+        this.wheelBodies.forEach((wheel: CANNON.Body, index: number) => {
+            if (index >= 2 && wheel.material) { // Roues arrière
+                wheel.material.friction = Car.DRIFT_CONFIG.REAR_FRICTION_NORMAL;
+            }
+        });
+
+        // Restaurer l'amortissement angulaire
+        if (this.body) {
+            this.body.angularDamping = Car.VEHICLE_DYNAMICS.BASE_ANGULAR_DAMPING;
+        }
+    }
+
+    private updateDriftPhysics(speed: number, angularVelocity: number, lateralVelocity: number): void {
+        if (!this.vehicle || !this.body) return;
+
+        // Ajuster la direction en fonction de la vitesse et de l'angle de drift
+        const driftSteeringMultiplier = Math.min(
+            1 + (speed / Car.DRIFT_CONFIG.DRIFT_INITIATION_SPEED),
+            Car.DRIFT_CONFIG.DRIFT_STEERING_MULTIPLIER
+        );
+
+        // Appliquer un couple de correction pour maintenir le drift
+        const correctionTorque = -angularVelocity * Car.DRIFT_CONFIG.DRIFT_STABILITY_FACTOR;
+        this.body.applyTorque(new CANNON.Vec3(0, correctionTorque, 0));
+
+        // Ajuster la friction en fonction de la vitesse latérale
+        // Utiliser une courbe plus douce pour la friction latérale
+        const lateralFrictionFactor = Math.max(
+            0.3, // Augmenté pour un meilleur contrôle
+            1 - (lateralVelocity / speed) * Car.DRIFT_CONFIG.DRIFT_MOMENTUM_FACTOR
+        );
+
+        // Appliquer une force de propulsion supplémentaire pendant le drift pour conserver l'élan
+        if (this.controls.isKeyPressed('z')) {
+            const forwardForce = new CANNON.Vec3(0, 0, 10 * speed / Car.DRIFT_CONFIG.DRIFT_INITIATION_SPEED);
+            this.body.applyLocalForce(forwardForce, new CANNON.Vec3(0, 0, 0));
+        }
+
+        this.wheelBodies.forEach((wheel: CANNON.Body, index: number) => {
+            if (index >= 2 && wheel.material) { // Roues arrière
+                wheel.material.friction = Car.DRIFT_CONFIG.REAR_FRICTION_HANDBRAKE * lateralFrictionFactor;
+            }
+        });
     }
 } 

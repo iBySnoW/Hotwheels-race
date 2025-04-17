@@ -10,8 +10,11 @@ class App {
     }
 
     private startGame() {
-        // Initialiser la scène seulement quand le joueur clique sur "Jouer"
-        this.scene = new Scene();
+        // Initialiser la scène avec un callback pour suivre la progression du chargement
+        this.scene = new Scene({}, (progress) => {
+            // Mettre à jour la barre de progression
+            this.loadingScreen.updateProgress(progress);
+        });
     }
 }
 
